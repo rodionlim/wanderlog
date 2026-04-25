@@ -6,7 +6,7 @@ An offline-first Android travel planner. Plan trips, build day-by-day itinerarie
 
 - **Trip management** — create and manage trips with destination, dates, duration, and automatic destination cover images
 - **Itinerary builder** — day-by-day items with drag-to-reorder and swipe-to-delete
-- **AI itinerary generation** — describe your trip and get a full itinerary via OpenAI API
+- **AI itinerary generation** — describe your trip and get a full itinerary or update existing plans
 - **Configurable AI models** — choose separate OpenAI models for itinerary generation and booking image/PDF parsing
 - **File import** — share booking emails or upload PDFs/images; AI parses them into itinerary items, lets you review/edit extracted details, stores the source document locally, and links it to imported entries
 - **Attachments vault** — attach markdown notes and files to any trip, with local storage and in-app preview for images, text, and PDFs
