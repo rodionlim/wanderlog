@@ -1,4 +1,12 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use(::load)
+    }
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -21,8 +29,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Inject Maps API key from local.properties into the manifest
-        val mapsKey = project.findProperty("MAPS_API_KEY")?.toString() ?: ""
+        // Inject Maps API key from local.properties into the manifest.
+        val mapsKey = providers.gradleProperty("MAPS_API_KEY").orNull
+            ?: localProperties.getProperty("MAPS_API_KEY", "")
         manifestPlaceholders["MAPS_API_KEY"] = mapsKey
 
         // Export Room schema for migration tracking

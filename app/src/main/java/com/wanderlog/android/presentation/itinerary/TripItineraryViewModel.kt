@@ -4,12 +4,15 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wanderlog.android.domain.model.ItineraryItem
+import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripDay
+import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
 import com.wanderlog.android.domain.usecase.itinerary.DeleteItineraryItemUseCase
 import com.wanderlog.android.domain.usecase.itinerary.GetItineraryForDayUseCase
 import com.wanderlog.android.domain.usecase.itinerary.UpdateItemOrderUseCase
 import com.wanderlog.android.presentation.navigation.Screen
+import dagger.Lazy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +40,7 @@ data class ItineraryUiState(
 class TripItineraryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val tripRepository: TripRepository,
+    private val placesRepository: Lazy<PlacesRepository>,
     private val getItemsForDay: GetItineraryForDayUseCase,
     private val deleteItem: DeleteItineraryItemUseCase,
     private val updateOrder: UpdateItemOrderUseCase
@@ -48,6 +52,7 @@ class TripItineraryViewModel @Inject constructor(
     val state: StateFlow<ItineraryUiState> = _state.asStateFlow()
 
     private val selectedDayId = MutableStateFlow<String?>(null)
+    private var attemptedCoverBackfill = false
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val itemsForDay: StateFlow<List<ItineraryItem>> = selectedDayId
@@ -64,8 +69,8 @@ class TripItineraryViewModel @Inject constructor(
     private fun loadTripAndDays() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            val trip = tripRepository.getTripById(tripId)
             tripRepository.getDaysForTripFlow(tripId).collect { days ->
+                val trip = ensureCoverImage(tripRepository.getTripById(tripId))
                 val currentDay = days.getOrNull(_state.value.selectedDayIndex) ?: days.firstOrNull()
                 selectedDayId.value = currentDay?.id
                 _state.update { s ->
@@ -79,6 +84,28 @@ class TripItineraryViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun ensureCoverImage(trip: Trip?): Trip? {
+        if (trip == null || trip.destination.isBlank() || !trip.coverImageUri.isNullOrBlank()) {
+            return trip
+        }
+        if (attemptedCoverBackfill) {
+            return trip
+        }
+
+        attemptedCoverBackfill = true
+        val coverImageUri = runCatching {
+            placesRepository.get().fetchDestinationCoverImage(trip.destination, trip.id)
+        }.getOrNull()
+
+        if (coverImageUri.isNullOrBlank()) {
+            return trip
+        }
+
+        val updatedTrip = trip.copy(coverImageUri = coverImageUri)
+        tripRepository.updateTrip(updatedTrip)
+        return updatedTrip
     }
 
     fun selectDay(index: Int) {
