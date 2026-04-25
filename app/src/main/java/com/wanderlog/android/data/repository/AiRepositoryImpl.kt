@@ -1,5 +1,6 @@
 package com.wanderlog.android.data.repository
 
+import android.content.Context
 import com.squareup.moshi.Moshi
 import com.wanderlog.android.data.remote.openai.OpenAiService
 import com.wanderlog.android.data.remote.openai.dto.ChatCompletionRequest
@@ -17,13 +18,16 @@ import com.wanderlog.android.domain.model.ParsedHotel
 import com.wanderlog.android.domain.model.Place
 import com.wanderlog.android.domain.model.TripDay
 import com.wanderlog.android.domain.repository.AiRepository
+import com.wanderlog.android.presentation.settings.SettingsViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
 
 class AiRepositoryImpl @Inject constructor(
     private val openAiService: OpenAiService,
-    private val moshi: Moshi
+    private val moshi: Moshi,
+    @ApplicationContext private val context: Context
 ) : AiRepository {
 
     override suspend fun generateItinerary(
@@ -68,6 +72,7 @@ class AiRepositoryImpl @Inject constructor(
         """.trimIndent()
 
         val request = ChatCompletionRequest(
+            model = SettingsViewModel.getOpenAiModel(context),
             messages = listOf(
                 MessageDto("system", systemPrompt),
                 MessageDto("user", userPrompt)
@@ -95,6 +100,7 @@ class AiRepositoryImpl @Inject constructor(
 
         val allParts: List<Any> = listOf(parsePrompt) + contentParts
         val request = ChatCompletionRequest(
+            model = SettingsViewModel.getOpenAiModel(context),
             messages = listOf(
                 MessageDto("system", systemPrompt),
                 MessageDto("user", allParts)

@@ -5,7 +5,7 @@ import com.squareup.moshi.JsonClass
 
 @JsonClass(generateAdapter = true)
 data class ChatCompletionRequest(
-    val model: String = "gpt-4o",
+    val model: String = "gpt-5.4-mini",
     val messages: List<MessageDto>,
     @Json(name = "response_format") val responseFormat: ResponseFormatDto? = null,
     @Json(name = "max_tokens") val maxTokens: Int = 4096,
