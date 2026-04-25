@@ -3,7 +3,9 @@ package com.wanderlog.android.presentation.trips.form
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.Lazy
 import com.wanderlog.android.domain.model.Trip
+import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
 import com.wanderlog.android.domain.usecase.trip.CreateTripUseCase
 import com.wanderlog.android.domain.usecase.trip.UpdateTripUseCase
@@ -24,6 +26,7 @@ data class TripFormState(
     val destination: String = "",
     val startDate: LocalDate = LocalDate.now(),
     val endDate: LocalDate = LocalDate.now().plusDays(6),
+    val coverImageUri: String? = null,
     val budgetAmount: String = "",
     val currencyCode: String = "USD",
     val isLoading: Boolean = false,
@@ -35,9 +38,12 @@ data class TripFormState(
 class TripFormViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val tripRepository: TripRepository,
+    private val placesRepository: Lazy<PlacesRepository>,
     private val createTrip: CreateTripUseCase,
     private val updateTrip: UpdateTripUseCase
 ) : ViewModel() {
+
+    private var originalDestination: String? = null
 
     private val _state = MutableStateFlow(TripFormState())
     val state: StateFlow<TripFormState> = _state.asStateFlow()
@@ -59,10 +65,12 @@ class TripFormViewModel @Inject constructor(
                     destination = trip.destination,
                     startDate = trip.startDate,
                     endDate = trip.endDate,
+                    coverImageUri = trip.coverImageUri,
                     budgetAmount = trip.budgetAmount?.toString() ?: "",
                     currencyCode = trip.currencyCode
                 )
             }
+            originalDestination = trip.destination
         }
     }
 
@@ -88,12 +96,25 @@ class TripFormViewModel @Inject constructor(
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch {
             runCatching {
+                val tripId = s.tripId ?: UUID.randomUUID().toString()
+                val normalizedDestination = s.destination.trim()
+                val existingCover = s.coverImageUri
+                val coverImageUri = when {
+                    s.tripId != null && normalizedDestination == originalDestination && !existingCover.isNullOrBlank() -> existingCover
+                    else -> runCatching {
+                        placesRepository.get().fetchDestinationCoverImage(
+                            destination = normalizedDestination,
+                            tripId = tripId
+                        )
+                    }.getOrNull()
+                }
                 val trip = Trip(
-                    id = s.tripId ?: UUID.randomUUID().toString(),
+                    id = tripId,
                     name = s.name.trim(),
-                    destination = s.destination.trim(),
+                    destination = normalizedDestination,
                     startDate = s.startDate,
                     endDate = s.endDate,
+                    coverImageUri = coverImageUri,
                     budgetAmount = s.budgetAmount.toDoubleOrNull(),
                     currencyCode = s.currencyCode
                 )

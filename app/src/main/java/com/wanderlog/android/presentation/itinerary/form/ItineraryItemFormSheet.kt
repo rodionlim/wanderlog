@@ -30,13 +30,14 @@ fun ItineraryItemFormSheet(
     dayId: String,
     editingItem: ItineraryItem?,
     onDismiss: () -> Unit,
+    onDeleteRequested: (() -> Unit)? = null,
     onPlaceSearchRequested: () -> Unit,
     viewModel: ItineraryItemFormViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(editingItem) {
-        if (editingItem != null) viewModel.loadExisting(editingItem)
+        if (editingItem != null) viewModel.loadExisting(editingItem) else viewModel.resetForm()
     }
 
     LaunchedEffect(state.isSaved) {
@@ -115,6 +116,15 @@ fun ItineraryItemFormSheet(
             onClick = { viewModel.save(tripId, dayId, editingItem?.id) },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Save") }
+
+        if (editingItem != null && onDeleteRequested != null) {
+            OutlinedButton(
+                onClick = onDeleteRequested,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Delete item")
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
     }

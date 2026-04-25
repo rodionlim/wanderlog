@@ -30,12 +30,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wanderlog.android.core.ui.component.destinationVisualFor
 import com.wanderlog.android.core.util.toDisplayString
 import com.wanderlog.android.domain.model.Trip
+import coil.compose.AsyncImage
 
 @Composable
 fun TripCard(
@@ -66,8 +68,23 @@ fun TripCard(
                         )
                     )
             ) {
-                // Big emoji, bottom-left
-                Text(
+                trip.coverImageUri?.takeIf { it.isNotBlank() }?.let { cover ->
+                    AsyncImage(
+                        model = cover,
+                        contentDescription = trip.destination,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color.Black.copy(alpha = 0.08f), Color.Black.copy(alpha = 0.48f))
+                                )
+                            )
+                    )
+                } ?: Text(
                     text = visual.emoji,
                     fontSize = 72.sp,
                     modifier = Modifier
@@ -89,6 +106,22 @@ fun TripCard(
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold
                     )
+                }
+                if (!trip.coverImageUri.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(12.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(Color.Black.copy(alpha = 0.28f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = visual.emoji,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
                 }
             }
 

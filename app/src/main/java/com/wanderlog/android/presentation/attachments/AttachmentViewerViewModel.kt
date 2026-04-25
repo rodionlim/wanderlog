@@ -1,8 +1,10 @@
 package com.wanderlog.android.presentation.attachments
 
+import android.graphics.Bitmap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wanderlog.android.core.util.FileUtils
 import com.wanderlog.android.domain.model.Attachment
 import com.wanderlog.android.domain.repository.AttachmentRepository
 import com.wanderlog.android.presentation.navigation.Screen
@@ -17,6 +19,7 @@ import javax.inject.Inject
 data class AttachmentViewerState(
     val attachment: Attachment? = null,
     val textContent: String? = null,
+    val pdfPages: List<Bitmap> = emptyList(),
     val file: File? = null,
     val isLoading: Boolean = true,
     val error: String? = null
@@ -46,13 +49,29 @@ class AttachmentViewerViewModel @Inject constructor(
             }
             val file = repository.getFile(attachment)
             val text = if (attachment.isTextLike()) runCatching { repository.readText(attachment) }.getOrNull() else null
+            val pdfPages = if (attachment.isPdf()) {
+                runCatching { FileUtils.renderPdfPages(file) }.getOrElse {
+                    _state.value = AttachmentViewerState(isLoading = false, error = it.message ?: "Failed to render PDF")
+                    return@launch
+                }
+            } else {
+                emptyList()
+            }
             _state.value = AttachmentViewerState(
                 attachment = attachment,
                 textContent = text,
+                pdfPages = pdfPages,
                 file = file,
                 isLoading = false
             )
         }
+    }
+
+    override fun onCleared() {
+        _state.value.pdfPages.forEach { bitmap ->
+            if (!bitmap.isRecycled) bitmap.recycle()
+        }
+        super.onCleared()
     }
 }
 
@@ -64,3 +83,6 @@ fun Attachment.isTextLike(): Boolean =
         displayName.endsWith(".txt", ignoreCase = true)
 
 fun Attachment.isImage(): Boolean = mimeType.startsWith("image/")
+
+fun Attachment.isPdf(): Boolean =
+    mimeType == "application/pdf" || displayName.endsWith(".pdf", ignoreCase = true)

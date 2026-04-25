@@ -5,6 +5,7 @@ import com.squareup.moshi.Moshi
 import com.wanderlog.android.data.remote.openai.OpenAiService
 import com.wanderlog.android.data.remote.openai.dto.ChatCompletionRequest
 import com.wanderlog.android.data.remote.openai.dto.ContentPartDto
+import com.wanderlog.android.data.remote.openai.dto.ImagePart
 import com.wanderlog.android.data.remote.openai.dto.MessageDto
 import com.wanderlog.android.data.remote.openai.dto.ResponseFormatDto
 import com.wanderlog.android.data.remote.openai.dto.TextPart
@@ -23,12 +24,26 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import org.json.JSONObject
 import java.util.UUID
 import javax.inject.Inject
+import retrofit2.HttpException
 
 class AiRepositoryImpl @Inject constructor(
     private val openAiService: OpenAiService,
     private val moshi: Moshi,
     @ApplicationContext private val context: Context
 ) : AiRepository {
+
+    private val chatCompletionsVisionModels = setOf(
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "o1",
+        "o1-mini",
+        "o3",
+        "o3-mini",
+        "o4-mini"
+    )
 
     override suspend fun generateItinerary(
         destination: String,
@@ -80,7 +95,7 @@ class AiRepositoryImpl @Inject constructor(
             responseFormat = ResponseFormatDto("json_object")
         )
 
-        val response = openAiService.chatCompletion(request)
+        val response = chatCompletionOrThrow(request, "generate itinerary")
         val json = response.choices.first().message.content
         return parseItineraryJson(json, destination)
     }
@@ -90,17 +105,24 @@ class AiRepositoryImpl @Inject constructor(
         val systemPrompt = "You are a travel document parser. Always respond with valid JSON only.$hintLine"
         val parsePrompt = TextPart(text = """
             Extract all travel details from this document.
+                        Prefer ISO 8601 date-time strings when the document includes both a date and a time.
+            Include arrival and departure terminals, flight type or cabin/fare class, and total price whenever they are visible.
+            For the flight `price`, return the total amount across all passengers for that booking or segment, not a per-person amount.
+            If the document lists separate fares, taxes, or passenger totals, sum them into one final total price string.
             Output ONLY valid JSON with this schema:
             {
-              "flights": [{"flightNumber":null,"origin":"","destination":"","departureDateTime":null,"arrivalDateTime":null,"bookingRef":null}],
+                            "flights": [{"flightNumber":null,"airline":null,"origin":"","destination":"","departureDateTime":null,"arrivalDateTime":null,"departureTerminal":null,"arrivalTerminal":null,"flightType":null,"price":null,"bookingRef":null}],
               "hotels": [{"name":"","address":null,"checkIn":null,"checkOut":null,"bookingRef":null}],
               "activities": [{"title":"","location":null,"dateTime":null,"notes":null}]
             }
         """.trimIndent())
 
+        val selectedModel = SettingsViewModel.getOpenAiModel(context)
+        val selectedParsingModel = SettingsViewModel.getOpenAiParsingModel(context)
+        val requestModel = pickParsingModel(selectedModel, selectedParsingModel, contentParts)
         val allParts: List<Any> = listOf(parsePrompt) + contentParts
         val request = ChatCompletionRequest(
-            model = SettingsViewModel.getOpenAiModel(context),
+            model = requestModel,
             messages = listOf(
                 MessageDto("system", systemPrompt),
                 MessageDto("user", allParts)
@@ -108,9 +130,35 @@ class AiRepositoryImpl @Inject constructor(
             responseFormat = ResponseFormatDto("json_object")
         )
 
-        val response = openAiService.chatCompletion(request)
+        val response = chatCompletionOrThrow(
+            request,
+            "parse booking document with model $requestModel"
+        )
         val json = response.choices.first().message.content
         return parseBookingJson(json)
+    }
+
+    private fun pickParsingModel(
+        selectedModel: String,
+        selectedParsingModel: String,
+        contentParts: List<ContentPartDto>
+    ): String {
+        val hasImageInput = contentParts.any { it is ImagePart }
+        if (!hasImageInput) {
+            return selectedModel
+        }
+        return selectedParsingModel.takeIf { it in chatCompletionsVisionModels } ?: "gpt-4o-mini"
+    }
+
+    private suspend fun chatCompletionOrThrow(
+        request: ChatCompletionRequest,
+        action: String
+    ) = try {
+        openAiService.chatCompletion(request)
+    } catch (exception: HttpException) {
+        val errorBody = exception.response()?.errorBody()?.string()?.trim().orEmpty()
+        val detail = errorBody.ifBlank { exception.message() ?: "HTTP ${exception.code()}" }
+        throw IllegalStateException("OpenAI failed to $action: $detail", exception)
     }
 
     private fun parseItineraryJson(json: String, tripId: String): List<TripDay> {
@@ -169,10 +217,15 @@ class AiRepositoryImpl @Inject constructor(
                 val o = arr.getJSONObject(i)
                 add(ParsedFlight(
                     flightNumber = o.optString("flightNumber").takeIf { it.isNotBlank() },
+                    airline = o.optString("airline").takeIf { it.isNotBlank() },
                     origin = o.optString("origin", ""),
                     destination = o.optString("destination", ""),
                     departureDateTime = o.optString("departureDateTime").takeIf { it.isNotBlank() },
                     arrivalDateTime = o.optString("arrivalDateTime").takeIf { it.isNotBlank() },
+                    departureTerminal = o.optString("departureTerminal").takeIf { it.isNotBlank() },
+                    arrivalTerminal = o.optString("arrivalTerminal").takeIf { it.isNotBlank() },
+                    flightType = o.optString("flightType").takeIf { it.isNotBlank() },
+                    price = o.optString("price").takeIf { it.isNotBlank() },
                     bookingRef = o.optString("bookingRef").takeIf { it.isNotBlank() }
                 ))
             }

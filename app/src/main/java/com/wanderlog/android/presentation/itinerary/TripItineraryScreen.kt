@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -45,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,7 @@ import com.wanderlog.android.presentation.ai.fileImport.FileImportSheet
 import com.wanderlog.android.presentation.itinerary.component.ItineraryItemCard
 import com.wanderlog.android.presentation.itinerary.form.ItineraryItemFormSheet
 import com.wanderlog.android.presentation.placeSearch.PlaceSearchSheet
+import coil.compose.AsyncImage
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -70,6 +73,7 @@ fun TripItineraryScreen(
     onOpenPacking: () -> Unit,
     onOpenAiGenerate: () -> Unit,
     onOpenAttachments: () -> Unit,
+    onOpenAttachment: (String) -> Unit,
     viewModel: TripItineraryViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -135,20 +139,40 @@ fun TripItineraryScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(80.dp)
+                            .height(112.dp)
                             .background(
                                 Brush.linearGradient(
                                     listOf(visual.gradientStart, visual.gradientEnd)
                                 )
                             )
                     ) {
+                        state.tripCoverImageUri?.takeIf { it.isNotBlank() }?.let { cover ->
+                            AsyncImage(
+                                model = cover,
+                                contentDescription = state.tripDestination,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(Color.Black.copy(alpha = 0.10f), Color.Black.copy(alpha = 0.52f))
+                                        )
+                                    )
+                            )
+                        }
                         androidx.compose.foundation.layout.Row(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(visual.emoji, fontSize = 40.sp)
+                            Text(
+                                visual.emoji,
+                                fontSize = if (state.tripCoverImageUri.isNullOrBlank()) 40.sp else 28.sp
+                            )
                             androidx.compose.foundation.layout.Spacer(Modifier.padding(6.dp))
                             androidx.compose.foundation.layout.Column {
                                 Text(
@@ -203,7 +227,21 @@ fun TripItineraryScreen(
                                     ) {
                                         ItineraryItemCard(
                                             item = item,
-                                            modifier = Modifier.draggableHandle()
+                                            onClick = {
+                                                editingItem = item
+                                                showItemForm = true
+                                            },
+                                            onOpenAttachment = item.localAttachmentId()?.let { attachmentId ->
+                                                { onOpenAttachment(attachmentId) }
+                                            },
+                                            dragHandle = {
+                                                Icon(
+                                                    Icons.Default.DragHandle,
+                                                    contentDescription = "Drag",
+                                                    tint = androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant,
+                                                    modifier = Modifier.draggableHandle()
+                                                )
+                                            }
                                         )
                                     }
                                 }
@@ -228,6 +266,12 @@ fun TripItineraryScreen(
                     dayId = selectedDay.id,
                     editingItem = editingItem,
                     onDismiss = { showItemForm = false },
+                    onDeleteRequested = editingItem?.let { item ->
+                        {
+                            showItemForm = false
+                            itemToDelete = item
+                        }
+                    },
                     onPlaceSearchRequested = { showPlaceSearch = true }
                 )
             }
@@ -266,3 +310,8 @@ fun TripItineraryScreen(
         )
     }
 }
+
+private fun ItineraryItem.localAttachmentId(): String? =
+    confirmationUrl
+        ?.takeIf { it.startsWith("attachment://") }
+        ?.removePrefix("attachment://")

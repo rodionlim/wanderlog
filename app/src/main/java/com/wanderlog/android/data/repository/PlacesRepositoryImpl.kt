@@ -15,4 +15,7 @@ class PlacesRepositoryImpl @Inject constructor(
 
     override suspend fun fetchPlaceDetails(placeId: String): Place =
         dataSource.fetchPlaceDetails(placeId)
+
+    override suspend fun fetchDestinationCoverImage(destination: String, tripId: String): String? =
+        dataSource.fetchDestinationCoverImage(destination, tripId)
 }

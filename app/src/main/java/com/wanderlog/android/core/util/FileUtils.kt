@@ -9,6 +9,7 @@ import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 object FileUtils {
 
@@ -57,6 +58,26 @@ object FileUtils {
                             bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
                             bitmap.recycle()
                             out.toByteArray()
+                        }
+                    }
+                }
+            }
+        }
+
+    suspend fun renderPdfPages(file: File, maxPages: Int = 10): List<Bitmap> =
+        withContext(Dispatchers.IO) {
+            val pfd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            pfd.use {
+                PdfRenderer(it).use { renderer ->
+                    val count = minOf(renderer.pageCount, maxPages)
+                    (0 until count).map { idx ->
+                        renderer.openPage(idx).use { page ->
+                            val scale = 150f / 72f
+                            val width = (page.width * scale).toInt()
+                            val height = (page.height * scale).toInt()
+                            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            }
                         }
                     }
                 }

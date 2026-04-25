@@ -16,6 +16,7 @@ private const val PREFS_NAME = "wanderlog_secure"
 const val KEY_OPENAI_API_KEY = "openai_api_key"
 const val KEY_MAPS_API_KEY = "maps_api_key"
 const val KEY_OPENAI_MODEL = "openai_model"
+const val KEY_OPENAI_PARSING_MODEL = "openai_parsing_model"
 
 data class OpenAiModelOption(
     val id: String,
@@ -25,6 +26,7 @@ data class OpenAiModelOption(
 
 object OpenAiModels {
     const val DEFAULT_MODEL = "gpt-5.4-mini"
+    const val DEFAULT_PARSING_MODEL = "gpt-4o-mini"
 
     val options = listOf(
         OpenAiModelOption("gpt-5.4-mini", "GPT-5.4 Mini", "2.5M tokens/day tier"),
@@ -53,7 +55,21 @@ object OpenAiModels {
         OpenAiModelOption("codex-mini-latest", "Codex Mini Latest", "2.5M tokens/day tier")
     )
 
+    val parsingOptions = listOf(
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-4.1-mini",
+        "gpt-4.1",
+        "gpt-4.1-nano",
+        "o1-mini",
+        "o1",
+        "o3-mini",
+        "o3",
+        "o4-mini"
+    ).mapNotNull { modelId -> options.firstOrNull { it.id == modelId } }
+
     private val validIds = options.mapTo(linkedSetOf()) { it.id }
+    private val validParsingIds = parsingOptions.mapTo(linkedSetOf()) { it.id }
 
     fun sanitize(model: String?): String {
         val candidate = model?.trim().orEmpty()
@@ -62,12 +78,18 @@ object OpenAiModels {
 
     fun labelFor(model: String): String =
         options.firstOrNull { it.id == model }?.label ?: DEFAULT_MODEL
+
+    fun sanitizeParsingModel(model: String?): String {
+        val candidate = model?.trim().orEmpty()
+        return if (candidate in validParsingIds) candidate else DEFAULT_PARSING_MODEL
+    }
 }
 
 data class SettingsState(
     val openAiKey: String = "",
     val mapsKey: String = "",
     val openAiModel: String = OpenAiModels.DEFAULT_MODEL,
+    val openAiParsingModel: String = OpenAiModels.DEFAULT_PARSING_MODEL,
     val saved: Boolean = false
 )
 
@@ -97,7 +119,10 @@ class SettingsViewModel @Inject constructor(
             it.copy(
                 openAiKey = prefs.getString(KEY_OPENAI_API_KEY, "") ?: "",
                 mapsKey = prefs.getString(KEY_MAPS_API_KEY, "") ?: "",
-                openAiModel = OpenAiModels.sanitize(prefs.getString(KEY_OPENAI_MODEL, OpenAiModels.DEFAULT_MODEL))
+                openAiModel = OpenAiModels.sanitize(prefs.getString(KEY_OPENAI_MODEL, OpenAiModels.DEFAULT_MODEL)),
+                openAiParsingModel = OpenAiModels.sanitizeParsingModel(
+                    prefs.getString(KEY_OPENAI_PARSING_MODEL, OpenAiModels.DEFAULT_PARSING_MODEL)
+                )
             )
         }
     }
@@ -105,12 +130,18 @@ class SettingsViewModel @Inject constructor(
     fun onOpenAiKeyChange(v: String) = _state.update { it.copy(openAiKey = v) }
     fun onMapsKeyChange(v: String) = _state.update { it.copy(mapsKey = v) }
     fun onOpenAiModelChange(v: String) = _state.update { it.copy(openAiModel = OpenAiModels.sanitize(v)) }
+    fun onOpenAiParsingModelChange(v: String) =
+        _state.update { it.copy(openAiParsingModel = OpenAiModels.sanitizeParsingModel(v)) }
 
     fun save() {
         prefs.edit()
             .putString(KEY_OPENAI_API_KEY, _state.value.openAiKey.trim())
             .putString(KEY_MAPS_API_KEY, _state.value.mapsKey.trim())
             .putString(KEY_OPENAI_MODEL, OpenAiModels.sanitize(_state.value.openAiModel))
+            .putString(
+                KEY_OPENAI_PARSING_MODEL,
+                OpenAiModels.sanitizeParsingModel(_state.value.openAiParsingModel)
+            )
             .apply()
         _state.update { it.copy(saved = true) }
     }
@@ -124,12 +155,30 @@ class SettingsViewModel @Inject constructor(
             return prefs.getString(KEY_OPENAI_API_KEY, "") ?: ""
         }
 
+        fun getMapsKey(context: Context): String {
+            val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+            val prefs = EncryptedSharedPreferences.create(context, PREFS_NAME, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+            return prefs.getString(KEY_MAPS_API_KEY, "") ?: ""
+        }
+
         fun getOpenAiModel(context: Context): String {
             val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
             val prefs = EncryptedSharedPreferences.create(context, PREFS_NAME, masterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
             return OpenAiModels.sanitize(prefs.getString(KEY_OPENAI_MODEL, OpenAiModels.DEFAULT_MODEL))
+        }
+
+        fun getOpenAiParsingModel(context: Context): String {
+            val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+            val prefs = EncryptedSharedPreferences.create(context, PREFS_NAME, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+            return OpenAiModels.sanitizeParsingModel(
+                prefs.getString(KEY_OPENAI_PARSING_MODEL, OpenAiModels.DEFAULT_PARSING_MODEL)
+            )
         }
     }
 }

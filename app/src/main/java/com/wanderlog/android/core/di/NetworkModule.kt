@@ -1,11 +1,13 @@
 package com.wanderlog.android.core.di
 
+import android.content.pm.PackageManager
 import android.content.Context
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.net.PlacesClient
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import com.wanderlog.android.data.remote.openai.OpenAiService
+import com.wanderlog.android.presentation.settings.SettingsViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -54,8 +56,23 @@ object NetworkModule {
     @Provides
     @Singleton
     fun providePlacesClient(@ApplicationContext context: Context): PlacesClient {
-        // Places is initialised lazily here; the API key is injected at runtime
-        // via SettingsRepository.getMapsApiKey() before this provider is first used.
+        val runtimeKey = SettingsViewModel.getMapsKey(context).trim()
+        val manifestKey = runCatching {
+            val appInfo = context.packageManager.getApplicationInfo(
+                context.packageName,
+                PackageManager.GET_META_DATA
+            )
+            appInfo.metaData?.getString("com.google.android.geo.API_KEY").orEmpty()
+        }.getOrDefault("").trim()
+        val apiKey = runtimeKey.ifBlank { manifestKey }
+
+        require(apiKey.isNotBlank()) {
+            "Google Maps API key is required before using Places. Set it in Settings or local.properties."
+        }
+
+        if (!Places.isInitialized()) {
+            Places.initialize(context.applicationContext, apiKey)
+        }
         return Places.createClient(context)
     }
 }

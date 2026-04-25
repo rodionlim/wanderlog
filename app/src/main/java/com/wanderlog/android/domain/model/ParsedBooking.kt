@@ -8,10 +8,15 @@ data class ParsedBooking(
 
 data class ParsedFlight(
     val flightNumber: String? = null,
+    val airline: String? = null,
     val origin: String,
     val destination: String,
     val departureDateTime: String? = null,
     val arrivalDateTime: String? = null,
+    val departureTerminal: String? = null,
+    val arrivalTerminal: String? = null,
+    val flightType: String? = null,
+    val price: String? = null,
     val bookingRef: String? = null
 )
 

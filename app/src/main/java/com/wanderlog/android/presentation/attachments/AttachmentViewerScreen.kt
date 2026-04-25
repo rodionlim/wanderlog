@@ -1,5 +1,8 @@
 package com.wanderlog.android.presentation.attachments
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,8 +28,15 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -63,12 +75,43 @@ fun AttachmentViewerScreen(
 
                 attachment == null -> {}
 
-                attachment.isImage() && state.file != null -> AsyncImage(
-                    model = state.file,
-                    contentDescription = attachment.displayName,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().padding(16.dp)
-                )
+                attachment.isImage() && state.file != null -> ZoomableAttachment(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) { zoomModifier ->
+                    AsyncImage(
+                        model = state.file,
+                        contentDescription = attachment.displayName,
+                        contentScale = ContentScale.Fit,
+                        modifier = zoomModifier.fillMaxSize()
+                    )
+                }
+
+                attachment.isPdf() && state.pdfPages.isNotEmpty() -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    itemsIndexed(state.pdfPages) { index, page ->
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "Page ${index + 1}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            ZoomableAttachment(modifier = Modifier.fillMaxWidth()) { zoomModifier ->
+                                Image(
+                                    bitmap = page.asImageBitmap(),
+                                    contentDescription = "${attachment.displayName} page ${index + 1}",
+                                    contentScale = ContentScale.FillWidth,
+                                    modifier = zoomModifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
 
                 state.textContent != null -> Column(
                     modifier = Modifier
@@ -101,5 +144,35 @@ fun AttachmentViewerScreen(
 
             Box(modifier = Modifier.fillMaxWidth()) {} // preserve height
         }
+    }
+}
+
+@Composable
+private fun ZoomableAttachment(
+    modifier: Modifier = Modifier,
+    content: @Composable (Modifier) -> Unit
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        val updatedScale = (scale * zoomChange).coerceIn(1f, 5f)
+        scale = updatedScale
+        offset = if (updatedScale == 1f) Offset.Zero else offset + panChange
+    }
+
+    Box(
+        modifier = modifier
+            .clipToBounds()
+            .transformable(state = transformableState),
+        contentAlignment = Alignment.Center
+    ) {
+        content(
+            Modifier.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offset.x
+                translationY = offset.y
+            }
+        )
     }
 }

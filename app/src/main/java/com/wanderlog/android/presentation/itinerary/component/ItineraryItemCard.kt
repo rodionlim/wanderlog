@@ -1,5 +1,6 @@
 package com.wanderlog.android.presentation.itinerary.component
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Flight
@@ -25,6 +27,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.wanderlog.android.core.util.toDisplayDateTimeOrSelf
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
 
@@ -40,12 +44,16 @@ import com.wanderlog.android.domain.model.ItineraryItemType
 fun ItineraryItemCard(
     item: ItineraryItem,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    onOpenAttachment: (() -> Unit)? = null,
     dragHandle: @Composable (() -> Unit)? = null
 ) {
     val accent = item.itemType.accent()
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(14.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
@@ -82,7 +90,11 @@ fun ItineraryItemCard(
                 if (hasMeta) Spacer(Modifier.height(3.dp))
 
                 item.startTime?.let {
-                    val time = if (item.endTime != null) "$it – ${item.endTime}" else it
+                    val time = if (item.endTime != null) {
+                        "${it.toDisplayDateTimeOrSelf()} – ${item.endTime.toString().toDisplayDateTimeOrSelf()}"
+                    } else {
+                        it.toDisplayDateTimeOrSelf()
+                    }
                     Text(
                         time,
                         style = MaterialTheme.typography.labelMedium,
@@ -98,15 +110,46 @@ fun ItineraryItemCard(
                         maxLines = 1
                     )
                 }
+                item.bookingRef?.let { ref ->
+                    Text(
+                        "Ref: $ref",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+                item.notes?.let { notes ->
+                    Text(
+                        notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3
+                    )
+                }
+                if (onOpenAttachment != null) {
+                    TextButton(onClick = onOpenAttachment, modifier = Modifier.padding(top = 2.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Open attachment", color = accent)
+                    }
+                }
             }
 
-            dragHandle?.invoke()
-            Spacer(Modifier.width(4.dp))
-            Icon(
-                Icons.Default.DragHandle,
-                contentDescription = "Drag",
-                tint = MaterialTheme.colorScheme.outlineVariant
-            )
+            if (dragHandle != null) {
+                dragHandle()
+            } else {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    Icons.Default.DragHandle,
+                    contentDescription = "Drag",
+                    tint = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
         }
     }
 }

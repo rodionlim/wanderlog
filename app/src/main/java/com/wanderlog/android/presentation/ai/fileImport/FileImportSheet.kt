@@ -11,13 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -93,23 +90,14 @@ fun FileImportSheet(
             }
 
             is FileImportStep.Review -> {
-                Text("Review extracted items (${s.items.size})", style = MaterialTheme.typography.titleMedium)
-                LazyColumn(modifier = Modifier.fillMaxWidth().height(280.dp)) {
-                    items(s.items) { item ->
-                        Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                            Text(item.title, style = MaterialTheme.typography.bodyLarge)
-                            item.startTime?.let { Text("Date/time: $it", style = MaterialTheme.typography.bodySmall) }
-                            item.bookingRef?.let { Text("Ref: $it", style = MaterialTheme.typography.bodySmall) }
-                        }
-                        HorizontalDivider()
-                    }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = viewModel::reset, modifier = Modifier.weight(1f)) { Text("Re-import") }
-                    Button(onClick = { viewModel.commitItems(tripId, s.items) }, modifier = Modifier.weight(1f)) {
-                        Text("Add to Itinerary")
-                    }
-                }
+                ImportedBookingReview(
+                    step = s,
+                    onUpdateItem = viewModel::updateReviewedItem,
+                    onReset = viewModel::reset,
+                    onCommit = { viewModel.commitItems(tripId, s.items) },
+                    resetLabel = "Re-import",
+                    commitLabel = "Add to Itinerary"
+                )
             }
 
             is FileImportStep.Error -> {

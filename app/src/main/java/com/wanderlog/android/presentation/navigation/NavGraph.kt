@@ -56,7 +56,10 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
                 onOpenBudget = { navController.navigate(Screen.Budget.createRoute(tripId)) },
                 onOpenPacking = { navController.navigate(Screen.Packing.createRoute(tripId)) },
                 onOpenAiGenerate = { navController.navigate(Screen.AiGenerate.createRoute(tripId)) },
-                onOpenAttachments = { navController.navigate(Screen.Attachments.createRoute(tripId)) }
+                onOpenAttachments = { navController.navigate(Screen.Attachments.createRoute(tripId)) },
+                onOpenAttachment = { attachmentId ->
+                    navController.navigate(Screen.AttachmentViewer.createRoute(attachmentId))
+                }
             )
         }
 

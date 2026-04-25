@@ -27,7 +27,7 @@ hiltNavigationCompose       = "1.2.0"
 # Networking
 retrofit                    = "2.11.0"
 okhttp                      = "4.12.0"
-moshi                       = "1.15.1"
+moshi                       = "1.15.2"
 
 # Coroutines
 coroutines                  = "1.8.1"

@@ -36,6 +36,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var modelMenuExpanded by remember { mutableStateOf(false) }
+    var parsingModelMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) {
         if (state.saved) onBack()
@@ -80,6 +81,40 @@ fun SettingsScreen(
 
                 Text(
                     selectedOption?.usageTier ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            val selectedParsingOption = OpenAiModels.parsingOptions.firstOrNull { it.id == state.openAiParsingModel }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Booking Image/PDF Parsing Model", style = MaterialTheme.typography.bodyMedium)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { parsingModelMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("${OpenAiModels.labelFor(state.openAiParsingModel)} (${state.openAiParsingModel})")
+                    }
+
+                    DropdownMenu(
+                        expanded = parsingModelMenuExpanded,
+                        onDismissRequest = { parsingModelMenuExpanded = false }
+                    ) {
+                        OpenAiModels.parsingOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text("${option.label} (${option.id})") },
+                                onClick = {
+                                    viewModel.onOpenAiParsingModelChange(option.id)
+                                    parsingModelMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    selectedParsingOption?.usageTier ?: "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

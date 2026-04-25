@@ -20,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -42,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.presentation.ai.fileImport.FileImportStep
 import com.wanderlog.android.presentation.ai.fileImport.FileImportViewModel
+import com.wanderlog.android.presentation.ai.fileImport.ImportedBookingReview
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +104,7 @@ fun ShareImportScreen(
 
                 is FileImportStep.Review -> ReviewContent(
                     step = s,
+                    onUpdateItem = viewModel::updateReviewedItem,
                     onReset = viewModel::reset,
                     onCommit = {
                         selectedTripId?.let { tid ->
@@ -219,22 +220,16 @@ private fun IdleContent(
 @Composable
 private fun ReviewContent(
     step: FileImportStep.Review,
+    onUpdateItem: (com.wanderlog.android.domain.model.ItineraryItem) -> Unit,
     onReset: () -> Unit,
     onCommit: () -> Unit
 ) {
-    Text("Review extracted items (${step.items.size})", style = MaterialTheme.typography.titleMedium)
-    LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp)) {
-        items(step.items) { item ->
-            Column(modifier = Modifier.padding(vertical = 6.dp)) {
-                Text(item.title, style = MaterialTheme.typography.bodyLarge)
-                item.startTime?.let { Text("Date/time: $it", style = MaterialTheme.typography.bodySmall) }
-                item.bookingRef?.let { Text("Ref: $it", style = MaterialTheme.typography.bodySmall) }
-            }
-            HorizontalDivider()
-        }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onReset, modifier = Modifier.weight(1f)) { Text("Re-parse") }
-        Button(onClick = onCommit, modifier = Modifier.weight(1f)) { Text("Add to Itinerary") }
-    }
+    ImportedBookingReview(
+        step = step,
+        onUpdateItem = onUpdateItem,
+        onReset = onReset,
+        onCommit = onCommit,
+        resetLabel = "Re-parse",
+        commitLabel = "Add to Itinerary"
+    )
 }

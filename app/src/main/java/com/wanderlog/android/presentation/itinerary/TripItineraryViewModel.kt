@@ -26,6 +26,7 @@ data class ItineraryUiState(
     val tripId: String = "",
     val tripName: String = "",
     val tripDestination: String = "",
+    val tripCoverImageUri: String? = null,
     val days: List<TripDay> = emptyList(),
     val selectedDayIndex: Int = 0,
     val itemsForSelectedDay: List<ItineraryItem> = emptyList(),
@@ -71,6 +72,7 @@ class TripItineraryViewModel @Inject constructor(
                     s.copy(
                         tripName = trip?.name ?: "",
                         tripDestination = trip?.destination ?: "",
+                        tripCoverImageUri = trip?.coverImageUri,
                         days = days,
                         isLoading = false
                     )

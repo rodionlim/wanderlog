@@ -46,9 +46,15 @@ class ItineraryItemFormViewModel @Inject constructor(
                 startTime = item.startTime ?: "",
                 endTime = item.endTime ?: "",
                 notes = item.notes ?: "",
-                bookingRef = item.bookingRef ?: ""
+                bookingRef = item.bookingRef ?: "",
+                isSaved = false,
+                error = null
             )
         }
+    }
+
+    fun resetForm() {
+        _state.value = ItemFormState()
     }
 
     fun onTitleChange(v: String) = _state.update { it.copy(title = v) }

@@ -40,17 +40,17 @@ Run these from Windows (Android Studio terminal or PowerShell), or from WSL if t
 
 1. Copy `local.properties.template` → `local.properties` and set `sdk.dir` to your Android SDK path.
 2. Set `MAPS_API_KEY` in `local.properties` (injected into the manifest via `manifestPlaceholders`).
-3. In the running app → Settings screen, enter your **OpenAI API key** and optionally the Google Maps key at runtime (stored in `EncryptedSharedPreferences`).
+3. In the running app → Settings screen, enter your **OpenAI API key**, optionally the Google Maps key at runtime, and choose separate OpenAI models for general trip generation vs booking image/PDF parsing (stored in `EncryptedSharedPreferences`).
 
 ## Architecture
 
 **Kotlin + Jetpack Compose + MVVM + Clean Architecture** with three layers:
 
-| Layer | Package | Role |
-|---|---|---|
-| Domain | `domain/model`, `domain/repository`, `domain/usecase` | Pure Kotlin — no Android deps. Defines data models, repository interfaces, and use cases |
-| Data | `data/local`, `data/remote`, `data/repository` | Room (local), Retrofit/OpenAI (remote), repository implementations |
-| Presentation | `presentation/` | ViewModels + Compose screens |
+| Layer        | Package                                               | Role                                                                                     |
+| ------------ | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Domain       | `domain/model`, `domain/repository`, `domain/usecase` | Pure Kotlin — no Android deps. Defines data models, repository interfaces, and use cases |
+| Data         | `data/local`, `data/remote`, `data/repository`        | Room (local), Retrofit/OpenAI (remote), repository implementations                       |
+| Presentation | `presentation/`                                       | ViewModels + Compose screens                                                             |
 
 **DI**: Hilt (SingletonComponent). All modules in `core/di/`.
 
@@ -77,10 +77,10 @@ All FKs cascade-delete. Dates stored as ISO-8601 text via `RoomConverters`.
 
 ## OpenAI Integration
 
-`AiRepositoryImpl` uses `POST /v1/chat/completions` with `model = "gpt-4o"` and `response_format = { "type": "json_object" }`.
+`AiRepositoryImpl` uses `POST /v1/chat/completions` with `response_format = { "type": "json_object" }` and runtime-configurable model selection from Settings.
 
-- **Itinerary generation**: system + user text prompt → JSON with day/item structure → `TripDay` + `ItineraryItem` lists.
-- **File parsing**: message `content` is an array of `ContentPartDto` (text or image). PDFs are rasterised page-by-page via `android.graphics.pdf.PdfRenderer` → JPEG → base64 in `ParseFileUseCase`.
+- **Itinerary generation**: system + user text prompt → JSON with day/item structure → `TripDay` + `ItineraryItem` lists, using the user-selected general OpenAI model.
+- **File parsing**: message `content` is an array of `ContentPartDto` (text or image). PDFs are rasterised page-by-page via `android.graphics.pdf.PdfRenderer` → JPEG → base64 in `ParseFileUseCase`. Parsing uses a separate user-selectable parsing model, and image/PDF requests fall back to a vision-safe model when needed.
 
 The API key is injected per-request by `ApiKeyInterceptor` reading from `EncryptedSharedPreferences`.
 
@@ -88,11 +88,15 @@ The API key is injected per-request by `ApiKeyInterceptor` reading from `Encrypt
 
 `MapScreen` uses `maps-compose` (`GoogleMap` composable). Markers for each `ItineraryItem` with lat/lng. Polyline connects all stops in order.
 
-`PlacesDataSource` wraps `PlacesClient.findAutocompletePredictions` (autocomplete) and `fetchPlace` (details). `PlaceSearchViewModel` debounces the query by 300 ms.
+`PlacesDataSource` wraps `PlacesClient.findAutocompletePredictions` (autocomplete), `fetchPlace` (details), and place photo fetching for trip cover images. Destination cover photos are cached locally under app files storage. `PlaceSearchViewModel` debounces the query by 300 ms.
 
 ## File Import Flow
 
-`ParseFileUseCase` (AI use case) → branch by MIME type → `ContentPartDto` list → `AiRepositoryImpl.parseFile()` → `ParsedBooking` → `FileImportViewModel` shows review dialog → user confirms → `ItineraryRepository.insertItems()`.
+`ParseFileUseCase` (AI use case) → branch by MIME type → `ContentPartDto` list → `AiRepositoryImpl.parseFile()` → `ParsedBooking` → `FileImportViewModel` builds itinerary items and shows an editable review dialog → user confirms → `ItineraryRepository.insertItems()`.
+
+- Imported items are assigned to matching `TripDay`s based on parsed dates when possible.
+- For file-based imports, the original source document is stored locally and linked back to created itinerary items.
+- Flight imports can also create `TRANSPORT` expenses automatically from parsed ticket totals.
 
 ## Screens & Navigation
 
