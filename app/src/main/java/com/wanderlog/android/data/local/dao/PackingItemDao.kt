@@ -18,9 +18,23 @@ interface PackingItemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItem(item: PackingItemEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertItems(items: List<PackingItemEntity>)
+
     @Update
     suspend fun updateItem(item: PackingItemEntity)
 
+    @Query("DELETE FROM packing_items WHERE trip_id = :tripId")
+    suspend fun deleteItemsForTrip(tripId: String)
+
     @Delete
     suspend fun deleteItem(item: PackingItemEntity)
+
+    @androidx.room.Transaction
+    suspend fun replaceItemsForTrip(tripId: String, items: List<PackingItemEntity>) {
+        deleteItemsForTrip(tripId)
+        if (items.isNotEmpty()) {
+            insertItems(items)
+        }
+    }
 }

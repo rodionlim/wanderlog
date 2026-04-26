@@ -5,6 +5,7 @@ An offline-first Android travel planner. Plan trips, build day-by-day itinerarie
 ## Features
 
 - **Trip management** — create and manage trips with destination, dates, duration, and automatic destination cover images
+- **Traveller-aware trip setup** — set the number of travellers and save a name or alias for each traveller when creating a trip
 - **Itinerary builder** — day-by-day items with drag-to-reorder and swipe-to-delete, plus optional activity costs linked back to Budget
 - **AI itinerary generation** — describe your trip and get a full itinerary, or let AI choose the best existing days to update
 - **Configurable AI models** — choose separate OpenAI models for itinerary generation and booking image/PDF parsing
@@ -12,7 +13,7 @@ An offline-first Android travel planner. Plan trips, build day-by-day itinerarie
 - **Attachments vault** — attach markdown notes and files to any trip, with local storage and in-app preview for images, text, and PDFs
 - **Map view** — see all stops on a map with a connecting polyline
 - **Budget tracker** — log and categorise trip expenses, including auto-created transport expenses from imported flight totals and activity expenses linked from the itinerary
-- **Packing list** — per-trip checklist
+- **Packing list** — per-trip checklist with aggregated and per-traveller tabs, plus AI-powered whole-list updates using trip context and a natural-language prompt
 - **Google Places integration** — search and pin locations when adding itinerary items, and fetch trip cover photos automatically
 
 ## Tech Stack

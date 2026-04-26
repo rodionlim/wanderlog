@@ -18,6 +18,9 @@ class PackingRepositoryImpl @Inject constructor(
     override suspend fun insertItem(item: PackingItem) =
         dao.insertItem(PackingItemEntity.fromDomain(item))
 
+    override suspend fun replaceItems(tripId: String, items: List<PackingItem>) =
+        dao.replaceItemsForTrip(tripId, items.map(PackingItemEntity::fromDomain))
+
     override suspend fun updateItem(item: PackingItem) =
         dao.updateItem(PackingItemEntity.fromDomain(item))
 

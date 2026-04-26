@@ -12,11 +12,13 @@ import com.wanderlog.android.data.remote.openai.dto.TextPart
 import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
+import com.wanderlog.android.domain.model.PackingItem
 import com.wanderlog.android.domain.model.ParsedActivity
 import com.wanderlog.android.domain.model.ParsedBooking
 import com.wanderlog.android.domain.model.ParsedFlight
 import com.wanderlog.android.domain.model.ParsedHotel
 import com.wanderlog.android.domain.model.Place
+import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripDay
 import com.wanderlog.android.domain.repository.AiRepository
 import com.wanderlog.android.presentation.settings.SettingsViewModel
@@ -124,6 +126,69 @@ class AiRepositoryImpl @Inject constructor(
         return parseItineraryJson(json, destination)
     }
 
+    override suspend fun updatePackingList(
+        trip: Trip,
+        existingItems: List<PackingItem>,
+        userPrompt: String
+    ): List<PackingItem> {
+        val travellerContext = trip.travellerProfiles.takeIf { it.isNotEmpty() }?.joinToString(", ") { profile ->
+            profile.displayName
+        } ?: "No named travellers saved"
+        val systemPrompt = "You are a travel packing assistant. Always respond with valid JSON only. Never include markdown code blocks or explanatory text."
+        val userPromptText = """
+            Update this trip packing list. Output ONLY valid JSON with this schema:
+            {
+              "items": [
+                {
+                  "title": "...",
+                                    "quantity": 1,
+                  "traveller_name": "exact saved traveller name or null",
+                  "is_checked": false
+                }
+              ]
+            }
+
+            Important rules:
+            - Return the full updated packing list, not a diff.
+            - Keep useful existing items unless the user clearly wants them removed or replaced.
+            - If traveller names are provided, use one of those exact names when an item belongs to a specific traveller.
+            - You may set traveller_name to null for shared family gear that should appear only once.
+            - Set quantity to a realistic integer for the full trip duration, traveller ages, and the type of item.
+            - Consumables and clothing should usually scale with trip length, weather, laundry assumptions, and traveller needs instead of defaulting to 1.
+            - Preserve is_checked for unchanged existing items whenever possible.
+            - Prefer concise, concrete item titles.
+            - Do not include categories, notes, markdown, or commentary.
+
+            Trip context:
+            - Trip name: ${trip.name}
+            - Destination: ${trip.destination}
+            - Start date: ${trip.startDate}
+            - End date: ${trip.endDate}
+            - Duration days: ${trip.durationDays}
+            - Traveller count: ${trip.travellerCount.coerceAtLeast(1)}
+            - Saved travellers: $travellerContext
+
+            Current packing list:
+            ${formatPackingItems(existingItems)}
+
+            User request:
+            $userPrompt
+        """.trimIndent()
+
+        val request = buildChatCompletionRequest(
+            model = SettingsViewModel.getOpenAiModel(context),
+            messages = listOf(
+                MessageDto("system", systemPrompt),
+                MessageDto("user", userPromptText)
+            ),
+            responseFormat = ResponseFormatDto("json_object")
+        )
+
+        val response = chatCompletionOrThrow(request, "update packing list")
+        val json = response.choices.first().message.content
+        return parsePackingListJson(json, trip)
+    }
+
     private fun buildMultiDayUpdatePrompt(
         destination: String,
         preferences: String,
@@ -202,6 +267,21 @@ class AiRepositoryImpl @Inject constructor(
                 }
             }
             .ifBlank { "- No items yet for this day." }
+    }
+
+    private fun formatPackingItems(items: List<PackingItem>): String {
+        return items
+            .sortedWith(compareBy<PackingItem> { it.sortOrder }.thenBy { it.title.lowercase() })
+            .joinToString("\n") { item ->
+                buildString {
+                    append("- ")
+                    append(item.title)
+                    append(" [quantity=${item.quantity}]")
+                    item.travellerName?.let { append(" [traveller=$it]") }
+                    append(" [checked=${item.isChecked}]")
+                }
+            }
+            .ifBlank { "- No packing items yet." }
     }
 
     override suspend fun parseFile(contentParts: List<ContentPartDto>, hint: DocumentHint?): ParsedBooking {
@@ -331,6 +411,41 @@ class AiRepositoryImpl @Inject constructor(
         }
         return result
     }
+
+    private fun parsePackingListJson(json: String, trip: Trip): List<PackingItem> {
+        val root = JSONObject(json)
+        val items = root.optJSONArray("items") ?: throw IllegalStateException("OpenAI returned packing JSON without an items array.")
+
+        return buildList {
+            for (index in 0 until items.length()) {
+                val itemObject = items.optJSONObject(index) ?: continue
+                val title = itemObject.optString("title").trim()
+                if (title.isBlank()) continue
+                val travellerName = itemObject
+                    .optNullableString("traveller_name")
+                    ?: itemObject.optNullableString("traveler_name")
+
+                add(
+                    PackingItem(
+                        id = UUID.randomUUID().toString(),
+                        tripId = trip.id,
+                        title = title,
+                        quantity = itemObject.optInt("quantity").takeIf { it > 0 }
+                            ?: itemObject.optInt("qty").takeIf { it > 0 }
+                            ?: 1,
+                        isChecked = itemObject.optBoolean("is_checked", false),
+                        travellerName = travellerName?.takeIf { name ->
+                            trip.travellerNames.isEmpty() || trip.travellerNames.contains(name)
+                        },
+                        sortOrder = size
+                    )
+                )
+            }
+        }
+    }
+
+    private fun JSONObject.optNullableString(key: String): String? =
+        if (isNull(key)) null else optString(key).trim().ifBlank { null }
 
     private fun parseBookingJson(json: String): ParsedBooking {
         val root = JSONObject(json)

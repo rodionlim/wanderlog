@@ -25,6 +25,8 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): WanderlogDatabase =
         Room.databaseBuilder(context, WanderlogDatabase::class.java, "wanderlog.db")
             .addMigrations(WanderlogDatabase.MIGRATION_2_3)
+            .addMigrations(WanderlogDatabase.MIGRATION_3_4)
+            .addMigrations(WanderlogDatabase.MIGRATION_4_5)
             .fallbackToDestructiveMigration()
             .build()
 

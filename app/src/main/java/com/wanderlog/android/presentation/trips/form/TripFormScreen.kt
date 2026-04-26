@@ -1,17 +1,19 @@
 package com.wanderlog.android.presentation.trips.form
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -21,7 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,8 +55,7 @@ fun TripFormScreen(
         if (state.isSaved) onBack()
     }
 
-    var showStartPicker by remember { mutableStateOf(false) }
-    var showEndPicker by remember { mutableStateOf(false) }
+    var showDateRangePicker by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -89,25 +90,13 @@ fun TripFormScreen(
             Spacer(Modifier.height(12.dp))
 
             OutlinedTextField(
-                value = state.startDate.toDisplayString(),
+                value = "${state.startDate.toDisplayString()} - ${state.endDate.toDisplayString()}",
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Start date") },
+                label = { Text("Trip dates") },
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
-                    TextButton(onClick = { showStartPicker = true }) { Text("Pick") }
-                }
-            )
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = state.endDate.toDisplayString(),
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("End date") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    TextButton(onClick = { showEndPicker = true }) { Text("Pick") }
+                    TextButton(onClick = { showDateRangePicker = true }) { Text("Pick") }
                 }
             )
             Spacer(Modifier.height(12.dp))
@@ -120,6 +109,38 @@ fun TripFormScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true
             )
+            Spacer(Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = state.travellerCount,
+                onValueChange = viewModel::onTravellerCountChange,
+                label = { Text("Number of travellers") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+
+            state.travellerProfiles.forEachIndexed { index, travellerProfile ->
+                Spacer(Modifier.height(12.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = travellerProfile.name,
+                        onValueChange = { viewModel.onTravellerNameChange(index, it) },
+                        label = { Text("Traveller ${index + 1} name or alias") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    OutlinedTextField(
+                        value = travellerProfile.age,
+                        onValueChange = { viewModel.onTravellerAgeChange(index, it) },
+                        label = { Text("Age") },
+                        modifier = Modifier.width(112.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                }
+            }
 
             state.error?.let { err ->
                 Spacer(Modifier.height(8.dp))
@@ -139,24 +160,14 @@ fun TripFormScreen(
         if (state.isLoading) LoadingOverlay()
     }
 
-    if (showStartPicker) {
-        DatePickerDialogWrapper(
-            initialDate = state.startDate,
-            onDismiss = { showStartPicker = false },
-            onDateSelected = { date ->
-                viewModel.onStartDateChange(date)
-                showStartPicker = false
-            }
-        )
-    }
-
-    if (showEndPicker) {
-        DatePickerDialogWrapper(
-            initialDate = state.endDate,
-            onDismiss = { showEndPicker = false },
-            onDateSelected = { date ->
-                viewModel.onEndDateChange(date)
-                showEndPicker = false
+    if (showDateRangePicker) {
+        DateRangePickerDialogWrapper(
+            initialStartDate = state.startDate,
+            initialEndDate = state.endDate,
+            onDismiss = { showDateRangePicker = false },
+            onDateRangeSelected = { startDate, endDate ->
+                viewModel.onDateRangeChange(startDate, endDate)
+                showDateRangePicker = false
             }
         )
     }
@@ -208,27 +219,37 @@ private fun DestinationField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DatePickerDialogWrapper(
-    initialDate: LocalDate,
+private fun DateRangePickerDialogWrapper(
+    initialStartDate: LocalDate,
+    initialEndDate: LocalDate,
     onDismiss: () -> Unit,
-    onDateSelected: (LocalDate) -> Unit
+    onDateRangeSelected: (LocalDate, LocalDate) -> Unit
 ) {
-    val millis = initialDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = millis)
+    val startMillis = initialStartDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+    val endMillis = initialEndDate.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli()
+    val dateRangePickerState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = startMillis,
+        initialSelectedEndDateMillis = endMillis
+    )
 
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                val selectedMillis = datePickerState.selectedDateMillis
-                if (selectedMillis != null) {
-                    val date = Instant.ofEpochMilli(selectedMillis).atZone(ZoneId.of("UTC")).toLocalDate()
-                    onDateSelected(date)
+                val selectedStartMillis = dateRangePickerState.selectedStartDateMillis
+                val selectedEndMillis = dateRangePickerState.selectedEndDateMillis
+                if (selectedStartMillis != null && selectedEndMillis != null) {
+                    onDateRangeSelected(
+                        Instant.ofEpochMilli(selectedStartMillis).atZone(ZoneId.of("UTC")).toLocalDate(),
+                        Instant.ofEpochMilli(selectedEndMillis).atZone(ZoneId.of("UTC")).toLocalDate()
+                    )
                 }
-            }) { Text("OK") }
+            }, enabled = dateRangePickerState.selectedStartDateMillis != null && dateRangePickerState.selectedEndDateMillis != null) {
+                Text("OK")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     ) {
-        DatePicker(state = datePickerState)
+        DateRangePicker(state = dateRangePickerState)
     }
 }

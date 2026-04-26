@@ -21,7 +21,9 @@ data class PackingItemEntity(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "trip_id") val tripId: String,
     val title: String,
+    val quantity: Int = 1,
     @ColumnInfo(name = "is_checked") val isChecked: Boolean = false,
+    @ColumnInfo(name = "traveller_name") val travellerName: String? = null,
     val category: String? = null,
     @ColumnInfo(name = "sort_order") val sortOrder: Int = 0
 ) {
@@ -29,7 +31,9 @@ data class PackingItemEntity(
         id = id,
         tripId = tripId,
         title = title,
+        quantity = quantity,
         isChecked = isChecked,
+        travellerName = travellerName,
         category = category,
         sortOrder = sortOrder
     )
@@ -39,7 +43,9 @@ data class PackingItemEntity(
             id = item.id,
             tripId = item.tripId,
             title = item.title,
+            quantity = item.quantity,
             isChecked = item.isChecked,
+            travellerName = item.travellerName,
             category = item.category,
             sortOrder = item.sortOrder
         )

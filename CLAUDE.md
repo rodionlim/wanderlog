@@ -61,7 +61,7 @@ Run these from Windows (Android Studio terminal or PowerShell), or from WSL if t
 ```
 core/di/           — DatabaseModule, NetworkModule, RepositoryModule
 core/util/         — FileUtils (PDF rasterise, image compress), DateTimeUtils, Result.kt
-data/local/        — Room: 5 entities + DAOs + WanderlogDatabase
+data/local/        — Room: 6 entities + DAOs + WanderlogDatabase
 data/remote/openai — OpenAiService (Retrofit), DTOs, ApiKeyInterceptor
 data/remote/places — PlacesDataSource (wraps Google Places SDK)
 data/repository/   — *RepositoryImpl (bind interfaces to Room/network)
@@ -71,9 +71,9 @@ presentation/      — one sub-package per screen; ViewModels use SavedStateHand
 
 ## Room Database
 
-5 tables: `trips`, `trip_days`, `itinerary_items`, `expenses`, `packing_items`.  
+6 tables: `trips`, `trip_days`, `itinerary_items`, `expenses`, `packing_items`, `attachments`.  
 All FKs cascade-delete. Dates stored as ISO-8601 text via `RoomConverters`.  
-`WanderlogDatabase` version = 2. Schema exported to `app/schemas/`.
+`WanderlogDatabase` version = 4. Schema exported to `app/schemas/`.
 
 ## OpenAI Integration
 
@@ -112,3 +112,5 @@ TripList → Itinerary(tripId)
   └─ AiGenerate(tripId)
 Settings (from TripList top-bar)
 ```
+
+`TripForm` also captures traveller aliases, and `PackingScreen` can show an aggregated checklist plus individual traveller tabs backed by per-traveller packing items.
