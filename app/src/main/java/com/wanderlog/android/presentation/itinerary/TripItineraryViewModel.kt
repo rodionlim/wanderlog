@@ -3,11 +3,18 @@ package com.wanderlog.android.presentation.itinerary
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wanderlog.android.domain.model.Expense
+import com.wanderlog.android.domain.model.ExpenseCategory
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripDay
+import com.wanderlog.android.domain.repository.AttachmentRepository
+import com.wanderlog.android.domain.repository.ItineraryRepository
 import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
+import com.wanderlog.android.core.util.localAttachmentId
+import com.wanderlog.android.domain.usecase.expense.DeleteExpenseUseCase
+import com.wanderlog.android.domain.usecase.expense.GetExpensesUseCase
 import com.wanderlog.android.domain.usecase.itinerary.DeleteItineraryItemUseCase
 import com.wanderlog.android.domain.usecase.itinerary.GetItineraryForDayUseCase
 import com.wanderlog.android.domain.usecase.itinerary.UpdateItemOrderUseCase
@@ -29,7 +36,9 @@ data class ItineraryUiState(
     val tripId: String = "",
     val tripName: String = "",
     val tripDestination: String = "",
+    val tripCurrencyCode: String = "USD",
     val tripCoverImageUri: String? = null,
+    val linkedExpensesById: Map<String, Expense> = emptyMap(),
     val days: List<TripDay> = emptyList(),
     val selectedDayIndex: Int = 0,
     val itemsForSelectedDay: List<ItineraryItem> = emptyList(),
@@ -40,7 +49,11 @@ data class ItineraryUiState(
 class TripItineraryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val tripRepository: TripRepository,
+    private val itineraryRepository: ItineraryRepository,
+    private val attachmentRepository: AttachmentRepository,
     private val placesRepository: Lazy<PlacesRepository>,
+    private val getExpenses: GetExpensesUseCase,
+    private val deleteExpense: DeleteExpenseUseCase,
     private val getItemsForDay: GetItineraryForDayUseCase,
     private val deleteItem: DeleteItineraryItemUseCase,
     private val updateOrder: UpdateItemOrderUseCase
@@ -52,6 +65,7 @@ class TripItineraryViewModel @Inject constructor(
     val state: StateFlow<ItineraryUiState> = _state.asStateFlow()
 
     private val selectedDayId = MutableStateFlow<String?>(null)
+    private val allTripItems = MutableStateFlow<List<ItineraryItem>>(emptyList())
     private var attemptedCoverBackfill = false
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -63,7 +77,27 @@ class TripItineraryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
+        observeExpenses()
+        observeTripItems()
         loadTripAndDays()
+    }
+
+    private fun observeTripItems() {
+        viewModelScope.launch {
+            itineraryRepository.getItemsForTrip(tripId).collect { items ->
+                allTripItems.value = items
+            }
+        }
+    }
+
+    private fun observeExpenses() {
+        viewModelScope.launch {
+            getExpenses(tripId).collect { expenses ->
+                _state.update {
+                    it.copy(linkedExpensesById = expenses.associateBy(Expense::id))
+                }
+            }
+        }
     }
 
     private fun loadTripAndDays() {
@@ -77,6 +111,7 @@ class TripItineraryViewModel @Inject constructor(
                     s.copy(
                         tripName = trip?.name ?: "",
                         tripDestination = trip?.destination ?: "",
+                        tripCurrencyCode = trip?.currencyCode ?: "USD",
                         tripCoverImageUri = trip?.coverImageUri,
                         days = days,
                         isLoading = false
@@ -114,7 +149,58 @@ class TripItineraryViewModel @Inject constructor(
     }
 
     fun deleteItem(item: ItineraryItem) {
-        viewModelScope.launch { deleteItem.invoke(item) }
+        viewModelScope.launch {
+            val attachmentId = item.localAttachmentId()
+            val itemsToDelete = attachmentId
+                ?.let { sharedAttachmentId ->
+                    allTripItems.value.filter { it.localAttachmentId() == sharedAttachmentId }
+                }
+                ?.takeIf { it.isNotEmpty() }
+                ?: listOf(item)
+
+            val linkedExpenses = itemsToDelete
+                .mapNotNull { linkedItem -> linkedItem.linkedExpenseId }
+                .distinct()
+                .mapNotNull(_state.value.linkedExpensesById::get)
+
+            val legacyImportedExpenses = if (linkedExpenses.isEmpty()) {
+                findLegacyImportedExpenses(itemsToDelete)
+            } else {
+                emptyList()
+            }
+
+            (linkedExpenses + legacyImportedExpenses)
+                .distinctBy(Expense::id)
+                .forEach { linkedExpense -> deleteExpense(linkedExpense) }
+
+            itemsToDelete.forEach { linkedItem ->
+                deleteItem.invoke(linkedItem)
+            }
+
+            if (attachmentId != null) {
+                val attachment = attachmentRepository.getById(attachmentId)
+                if (attachment != null) {
+                    attachmentRepository.delete(attachment)
+                }
+            }
+        }
+    }
+
+    private fun findLegacyImportedExpenses(items: List<ItineraryItem>): List<Expense> {
+        val bookingRefs = items
+            .mapNotNull { candidate -> candidate.bookingRef?.trim()?.takeIf { it.isNotBlank() } }
+            .toSet()
+
+        if (bookingRefs.isEmpty()) {
+            return emptyList()
+        }
+
+        return _state.value.linkedExpensesById.values.filter { expense ->
+            expense.category == ExpenseCategory.TRANSPORT &&
+                bookingRefs.any { bookingRef ->
+                    expense.notes?.contains("Booking reference: $bookingRef") == true
+                }
+        }
     }
 
     fun reorderItems(items: List<ItineraryItem>) {

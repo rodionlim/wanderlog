@@ -20,6 +20,28 @@ interface ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExpense(expense: ExpenseEntity)
 
+    @Query(
+        """
+        UPDATE expenses
+        SET title = :title,
+            amount = :amount,
+            currency_code = :currencyCode,
+            category = :category,
+            date = :date,
+            notes = :notes
+        WHERE id = :id
+        """
+    )
+    suspend fun updateExpense(
+        id: String,
+        title: String,
+        amount: Double,
+        currencyCode: String,
+        category: String,
+        date: java.time.LocalDate?,
+        notes: String?
+    )
+
     @Delete
     suspend fun deleteExpense(expense: ExpenseEntity)
 }

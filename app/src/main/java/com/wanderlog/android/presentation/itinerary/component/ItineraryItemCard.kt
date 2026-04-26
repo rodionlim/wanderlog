@@ -2,6 +2,7 @@ package com.wanderlog.android.presentation.itinerary.component
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Flight
@@ -36,13 +38,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.wanderlog.android.core.util.toDisplayDateTimeOrSelf
+import com.wanderlog.android.core.util.FriendlyDateTimeParts
+import com.wanderlog.android.core.util.flightDetailLine
+import com.wanderlog.android.core.util.notesForDisplay
+import com.wanderlog.android.core.util.toFriendlyDateTimePartsOrNull
+import com.wanderlog.android.core.util.toCurrencyString
+import com.wanderlog.android.domain.model.Expense
+import com.wanderlog.android.core.util.toFriendlyDateTimeOrSelf
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
 
 @Composable
 fun ItineraryItemCard(
     item: ItineraryItem,
+    linkedExpense: Expense? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     onOpenAttachment: (() -> Unit)? = null,
@@ -86,29 +95,52 @@ fun ItineraryItemCard(
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2
                 )
-                val hasMeta = item.startTime != null || item.place?.address != null
+                val hasMeta = item.startTime != null || item.endTime != null || item.place?.address != null
                 if (hasMeta) Spacer(Modifier.height(3.dp))
 
-                item.startTime?.let {
-                    val time = if (item.endTime != null) {
-                        "${it.toDisplayDateTimeOrSelf()} – ${item.endTime.toString().toDisplayDateTimeOrSelf()}"
-                    } else {
-                        it.toDisplayDateTimeOrSelf()
+                if (item.itemType == ItineraryItemType.FLIGHT) {
+                    item.startTime?.let { start ->
+                        FlightScheduleBlock(
+                            label = "Depart",
+                            parts = start.toFriendlyDateTimePartsOrNull(),
+                            fallback = start.toFriendlyDateTimeOrSelf(),
+                            location = item.flightDetailLine("Departure"),
+                            accent = accent
+                        )
                     }
-                    Text(
-                        time,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = accent,
-                        fontWeight = FontWeight.Medium
-                    )
+                    item.endTime?.let { end ->
+                        FlightScheduleBlock(
+                            label = "Arrive",
+                            parts = end.toFriendlyDateTimePartsOrNull(),
+                            fallback = end.toFriendlyDateTimeOrSelf(),
+                            location = item.flightDetailLine("Arrival"),
+                            accent = accent
+                        )
+                    }
+                } else {
+                    item.startTime?.let {
+                        val time = if (item.endTime != null) {
+                            "${it.toFriendlyDateTimeOrSelf()} – ${item.endTime.toString().toFriendlyDateTimeOrSelf()}"
+                        } else {
+                            it.toFriendlyDateTimeOrSelf()
+                        }
+                        Text(
+                            time,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = accent,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
-                item.place?.address?.let { addr ->
-                    Text(
-                        addr,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
+                if (item.itemType != ItineraryItemType.FLIGHT) {
+                    item.place?.address?.let { addr ->
+                        Text(
+                            addr,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
                 }
                 item.bookingRef?.let { ref ->
                     Text(
@@ -118,7 +150,25 @@ fun ItineraryItemCard(
                         maxLines = 1
                     )
                 }
-                item.notes?.let { notes ->
+                linkedExpense?.let { expense ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AttachMoney,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Budget: ${expense.amount.toCurrencyString(expense.currencyCode)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = accent,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
+                    }
+                }
+                item.notesForDisplay()?.let { notes ->
                     Text(
                         notes,
                         style = MaterialTheme.typography.bodySmall,
@@ -150,6 +200,43 @@ fun ItineraryItemCard(
                     tint = MaterialTheme.colorScheme.outlineVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FlightScheduleBlock(
+    label: String,
+    parts: FriendlyDateTimeParts?,
+    fallback: String,
+    location: String?,
+    accent: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "$label:",
+                style = MaterialTheme.typography.labelMedium,
+                color = accent,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = parts?.let { scheduleParts ->
+                    scheduleParts.time?.let { "${scheduleParts.date} • $it" } ?: scheduleParts.date
+                } ?: fallback,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        location?.let { place ->
+            Text(
+                text = place,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
+            )
         }
     }
 }

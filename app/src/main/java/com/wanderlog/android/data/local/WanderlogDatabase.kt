@@ -1,8 +1,10 @@
 package com.wanderlog.android.data.local
 
+import androidx.room.migration.Migration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.wanderlog.android.data.local.converter.RoomConverters
 import com.wanderlog.android.data.local.dao.AttachmentDao
 import com.wanderlog.android.data.local.dao.ExpenseDao
@@ -26,7 +28,7 @@ import com.wanderlog.android.data.local.entity.TripEntity
         PackingItemEntity::class,
         AttachmentEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(RoomConverters::class)
@@ -37,4 +39,14 @@ abstract class WanderlogDatabase : RoomDatabase() {
     abstract fun expenseDao(): ExpenseDao
     abstract fun packingItemDao(): PackingItemDao
     abstract fun attachmentDao(): AttachmentDao
+
+    companion object {
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE itinerary_items ADD COLUMN linked_expense_id TEXT"
+                )
+            }
+        }
+    }
 }

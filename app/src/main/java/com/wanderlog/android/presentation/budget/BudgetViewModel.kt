@@ -9,14 +9,12 @@ import com.wanderlog.android.domain.repository.TripRepository
 import com.wanderlog.android.domain.usecase.expense.AddExpenseUseCase
 import com.wanderlog.android.domain.usecase.expense.DeleteExpenseUseCase
 import com.wanderlog.android.domain.usecase.expense.GetExpensesUseCase
+import com.wanderlog.android.domain.usecase.expense.UpdateExpenseUseCase
 import com.wanderlog.android.presentation.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -32,7 +30,8 @@ data class BudgetUiState(
     val addTitle: String = "",
     val addAmount: String = "",
     val addCategory: ExpenseCategory = ExpenseCategory.OTHER,
-    val showAddForm: Boolean = false
+    val showAddForm: Boolean = false,
+    val editingExpenseId: String? = null
 )
 
 @HiltViewModel
@@ -41,6 +40,7 @@ class BudgetViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     getExpenses: GetExpensesUseCase,
     private val addExpense: AddExpenseUseCase,
+    private val updateExpense: UpdateExpenseUseCase,
     private val deleteExpense: DeleteExpenseUseCase
 ) : ViewModel() {
 
@@ -62,25 +62,69 @@ class BudgetViewModel @Inject constructor(
         }
     }
 
-    fun toggleAddForm() = _state.update { it.copy(showAddForm = !it.showAddForm) }
+    fun toggleAddForm() = _state.update {
+        val showForm = !it.showAddForm
+        if (showForm) {
+            it.copy(showAddForm = true, editingExpenseId = null, addTitle = "", addAmount = "", addCategory = ExpenseCategory.OTHER)
+        } else {
+            it.copy(showAddForm = false, editingExpenseId = null, addTitle = "", addAmount = "", addCategory = ExpenseCategory.OTHER)
+        }
+    }
     fun onTitleChange(v: String) = _state.update { it.copy(addTitle = v) }
     fun onAmountChange(v: String) = _state.update { it.copy(addAmount = v) }
     fun onCategoryChange(v: ExpenseCategory) = _state.update { it.copy(addCategory = v) }
     fun filterByCategory(cat: ExpenseCategory?) = _state.update { it.copy(filterCategory = cat) }
 
-    fun addExpense() {
+    fun editExpense(expense: Expense) {
+        _state.update {
+            it.copy(
+                addTitle = expense.title,
+                addAmount = expense.amount.toString(),
+                addCategory = expense.category,
+                showAddForm = true,
+                editingExpenseId = expense.id
+            )
+        }
+    }
+
+    fun cancelEditing() {
+        _state.update {
+            it.copy(
+                addTitle = "",
+                addAmount = "",
+                addCategory = ExpenseCategory.OTHER,
+                showAddForm = false,
+                editingExpenseId = null
+            )
+        }
+    }
+
+    fun saveExpense() {
         val s = _state.value
         val amount = s.addAmount.toDoubleOrNull() ?: return
         viewModelScope.launch {
-            addExpense(Expense(
-                id = UUID.randomUUID().toString(),
+            val expense = Expense(
+                id = s.editingExpenseId ?: UUID.randomUUID().toString(),
                 tripId = tripId,
                 title = s.addTitle.trim(),
                 amount = amount,
                 currencyCode = s.currencyCode,
                 category = s.addCategory
-            ))
-            _state.update { it.copy(addTitle = "", addAmount = "", showAddForm = false) }
+            )
+            if (s.editingExpenseId == null) {
+                addExpense(expense)
+            } else {
+                updateExpense(expense)
+            }
+            _state.update {
+                it.copy(
+                    addTitle = "",
+                    addAmount = "",
+                    addCategory = ExpenseCategory.OTHER,
+                    showAddForm = false,
+                    editingExpenseId = null
+                )
+            }
         }
     }
 

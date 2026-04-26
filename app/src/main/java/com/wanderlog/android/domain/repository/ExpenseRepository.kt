@@ -7,5 +7,6 @@ interface ExpenseRepository {
     fun getExpensesForTrip(tripId: String): Flow<List<Expense>>
     fun getTotalSpent(tripId: String): Flow<Double?>
     suspend fun insertExpense(expense: Expense)
+    suspend fun updateExpense(expense: Expense)
     suspend fun deleteExpense(expense: Expense)
 }

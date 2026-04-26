@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -92,7 +93,10 @@ fun BudgetScreen(
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Add Expense", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                if (state.editingExpenseId == null) "Add Expense" else "Edit Expense",
+                                style = MaterialTheme.typography.titleMedium
+                            )
                             OutlinedTextField(value = state.addTitle, onValueChange = viewModel::onTitleChange, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             OutlinedTextField(value = state.addAmount, onValueChange = viewModel::onAmountChange, label = { Text("Amount") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -101,8 +105,10 @@ fun BudgetScreen(
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = viewModel::toggleAddForm) { Text("Cancel") }
-                                TextButton(onClick = viewModel::addExpense) { Text("Add") }
+                                TextButton(onClick = viewModel::cancelEditing) { Text("Cancel") }
+                                TextButton(onClick = viewModel::saveExpense) {
+                                    Text(if (state.editingExpenseId == null) "Add" else "Save")
+                                }
                             }
                         }
                     }
@@ -111,7 +117,11 @@ fun BudgetScreen(
             }
 
             items(displayedExpenses, key = { it.id }) { expense ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.editExpense(expense) }
+                ) {
                     Row(modifier = Modifier.padding(12.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(expense.title, style = MaterialTheme.typography.titleMedium)

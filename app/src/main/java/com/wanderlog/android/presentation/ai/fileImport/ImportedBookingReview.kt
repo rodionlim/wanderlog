@@ -29,9 +29,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.wanderlog.android.core.util.toDisplayDateTimeOrSelf
+import com.wanderlog.android.core.util.FriendlyDateTimeParts
+import com.wanderlog.android.core.util.flightDetailLine
+import com.wanderlog.android.core.util.notesForDisplay
+import com.wanderlog.android.core.util.toFriendlyDateTimePartsOrNull
+import com.wanderlog.android.core.util.toFriendlyDateTimeOrSelf
 import com.wanderlog.android.core.util.toShortDisplay
 import com.wanderlog.android.domain.model.ItineraryItem
+import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.model.TripDay
 
 @Composable
@@ -110,11 +115,30 @@ private fun ImportedItemCard(
             )
             Text(item.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
-            item.startTime?.let { start ->
-                val timeLabel = item.endTime?.let { end ->
-                    "${start.toDisplayDateTimeOrSelf()} -> ${end.toDisplayDateTimeOrSelf()}"
-                } ?: start.toDisplayDateTimeOrSelf()
-                Text(timeLabel, style = MaterialTheme.typography.bodySmall)
+            if (item.itemType == ItineraryItemType.FLIGHT) {
+                item.startTime?.let { start ->
+                    ReviewFlightScheduleBlock(
+                        label = "Depart",
+                        parts = start.toFriendlyDateTimePartsOrNull(),
+                        fallback = start.toFriendlyDateTimeOrSelf(),
+                        location = item.flightDetailLine("Departure")
+                    )
+                }
+                item.endTime?.let { end ->
+                    ReviewFlightScheduleBlock(
+                        label = "Arrive",
+                        parts = end.toFriendlyDateTimePartsOrNull(),
+                        fallback = end.toFriendlyDateTimeOrSelf(),
+                        location = item.flightDetailLine("Arrival")
+                    )
+                }
+            } else {
+                item.startTime?.let { start ->
+                    val timeLabel = item.endTime?.let { end ->
+                        "${start.toFriendlyDateTimeOrSelf()} -> ${end.toFriendlyDateTimeOrSelf()}"
+                    } ?: start.toFriendlyDateTimeOrSelf()
+                    Text(timeLabel, style = MaterialTheme.typography.bodySmall)
+                }
             }
 
             item.bookingRef?.let {
@@ -125,7 +149,7 @@ private fun ImportedItemCard(
                 )
             }
 
-            item.notes?.let {
+            item.notesForDisplay()?.let {
                 Text(
                     it,
                     style = MaterialTheme.typography.bodySmall,
@@ -136,6 +160,39 @@ private fun ImportedItemCard(
             OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                 Text("Edit details")
             }
+        }
+    }
+}
+
+@Composable
+private fun ReviewFlightScheduleBlock(
+    label: String,
+    parts: FriendlyDateTimeParts?,
+    fallback: String,
+    location: String?
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Row {
+            Text(
+                text = "$label:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = " " + (parts?.let { scheduleParts ->
+                    scheduleParts.time?.let { "${scheduleParts.date} • $it" } ?: scheduleParts.date
+                } ?: fallback),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        location?.let { place ->
+            Text(
+                text = place,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

@@ -19,17 +19,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.wanderlog.android.domain.model.Expense
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.model.Place
+import java.time.LocalDate
 
 @Composable
 fun ItineraryItemFormSheet(
     tripId: String,
     dayId: String,
+    dayDate: LocalDate?,
+    currencyCode: String,
     editingItem: ItineraryItem?,
+    linkedExpense: Expense? = null,
     selectedPlace: Place? = null,
     onSelectedPlaceApplied: () -> Unit = {},
     onDismiss: () -> Unit,
@@ -39,8 +46,8 @@ fun ItineraryItemFormSheet(
 ) {
     val state by viewModel.state.collectAsState()
 
-    LaunchedEffect(editingItem) {
-        if (editingItem != null) viewModel.loadExisting(editingItem) else viewModel.resetForm()
+    LaunchedEffect(editingItem, linkedExpense) {
+        if (editingItem != null) viewModel.loadExisting(editingItem, linkedExpense) else viewModel.resetForm()
     }
 
     LaunchedEffect(state.isSaved) {
@@ -120,10 +127,24 @@ fun ItineraryItemFormSheet(
             singleLine = true
         )
 
+        if (state.itemType == ItineraryItemType.ACTIVITY) {
+            OutlinedTextField(
+                value = state.costAmount,
+                onValueChange = viewModel::onCostChange,
+                label = { Text("Cost ($currencyCode, optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                supportingText = {
+                    Text("This creates or updates a linked Activity expense in Budget.")
+                }
+            )
+        }
+
         state.error?.let { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
 
         Button(
-            onClick = { viewModel.save(tripId, dayId, editingItem?.id) },
+            onClick = { viewModel.save(tripId, dayId, dayDate, currencyCode, editingItem?.id) },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Save") }
 

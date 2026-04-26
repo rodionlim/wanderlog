@@ -34,6 +34,7 @@ data class ItineraryItemEntity(
     @ColumnInfo(name = "end_time") val endTime: String? = null,
     val notes: String? = null,
     @ColumnInfo(name = "booking_ref") val bookingRef: String? = null,
+    @ColumnInfo(name = "linked_expense_id") val linkedExpenseId: String? = null,
     @ColumnInfo(name = "confirmation_url") val confirmationUrl: String? = null,
     @ColumnInfo(name = "sort_order") val sortOrder: Int = 0,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
@@ -51,6 +52,7 @@ data class ItineraryItemEntity(
             endTime = endTime,
             notes = notes,
             bookingRef = bookingRef,
+            linkedExpenseId = linkedExpenseId,
             confirmationUrl = confirmationUrl,
             sortOrder = sortOrder
         )
@@ -72,6 +74,7 @@ data class ItineraryItemEntity(
             endTime = item.endTime,
             notes = item.notes,
             bookingRef = item.bookingRef,
+            linkedExpenseId = item.linkedExpenseId,
             confirmationUrl = item.confirmationUrl,
             sortOrder = item.sortOrder
         )

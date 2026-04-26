@@ -15,11 +15,11 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +54,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.wanderlog.android.core.ui.component.ConfirmDialog
 import com.wanderlog.android.core.ui.component.WanderTopBar
 import com.wanderlog.android.core.ui.component.destinationVisualFor
+import com.wanderlog.android.core.util.toCompactSlashDisplay
+import com.wanderlog.android.core.util.localAttachmentId
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.Place
 import com.wanderlog.android.presentation.ai.fileImport.FileImportSheet
@@ -108,7 +110,7 @@ fun TripItineraryScreen(
                         Icon(Icons.Default.Map, contentDescription = "Map")
                     }
                     IconButton(onClick = onOpenBudget) {
-                        Icon(Icons.Default.Money, contentDescription = "Budget")
+                        Icon(Icons.Default.AttachMoney, contentDescription = "Budget")
                     }
                     IconButton(onClick = onOpenPacking) {
                         Icon(Icons.Default.ShoppingCart, contentDescription = "Packing")
@@ -136,6 +138,7 @@ fun TripItineraryScreen(
                 Text("Loading...", modifier = Modifier.align(Alignment.Center))
             } else {
                 val visual = destinationVisualFor(state.tripDestination)
+                val selectedDay = state.days.getOrNull(state.selectedDayIndex) ?: state.days.firstOrNull()
                 androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
                     // Destination hero strip
                     Box(
@@ -184,7 +187,16 @@ fun TripItineraryScreen(
                                     style = androidx.compose.material3.MaterialTheme.typography.titleMedium
                                 )
                                 Text(
-                                    "${state.days.size} day${if (state.days.size != 1) "s" else ""}",
+                                    buildString {
+                                        selectedDay?.let {
+                                            append("Day ${it.dayNumber} • ${it.date.toCompactSlashDisplay()}")
+                                        }
+                                        if (state.days.isNotEmpty()) {
+                                            if (isNotEmpty()) append("   ")
+                                            append("${state.days.size} day")
+                                            if (state.days.size != 1) append("s")
+                                        }
+                                    },
                                     color = Color.White.copy(alpha = 0.9f),
                                     style = androidx.compose.material3.MaterialTheme.typography.labelSmall
                                 )
@@ -229,6 +241,7 @@ fun TripItineraryScreen(
                                     ) {
                                         ItineraryItemCard(
                                             item = item,
+                                            linkedExpense = item.linkedExpenseId?.let(state.linkedExpensesById::get),
                                             onClick = {
                                                 editingItem = item
                                                 showItemForm = true
@@ -266,7 +279,10 @@ fun TripItineraryScreen(
                 ItineraryItemFormSheet(
                     tripId = tripId,
                     dayId = selectedDay.id,
+                    dayDate = selectedDay.date,
+                    currencyCode = state.tripCurrencyCode,
                     editingItem = editingItem,
+                    linkedExpense = editingItem?.linkedExpenseId?.let(state.linkedExpensesById::get),
                     selectedPlace = selectedPlaceForForm,
                     onSelectedPlaceApplied = { selectedPlaceForForm = null },
                     onDismiss = { showItemForm = false },
@@ -312,16 +328,16 @@ fun TripItineraryScreen(
     }
 
     itemToDelete?.let { item ->
+        val isImportedGroup = item.localAttachmentId() != null
         ConfirmDialog(
-            title = "Delete item",
-            message = "Remove \"${item.title}\"?",
+            title = if (isImportedGroup) "Delete imported entries" else "Delete item",
+            message = if (isImportedGroup) {
+                "Remove \"${item.title}\" and the other itinerary entries, budget items, and attachment imported from the same file?"
+            } else {
+                "Remove \"${item.title}\"?"
+            },
             onConfirm = { viewModel.deleteItem(item); itemToDelete = null },
             onDismiss = { itemToDelete = null }
         )
     }
 }
-
-private fun ItineraryItem.localAttachmentId(): String? =
-    confirmationUrl
-        ?.takeIf { it.startsWith("attachment://") }
-        ?.removePrefix("attachment://")

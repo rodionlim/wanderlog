@@ -11,6 +11,7 @@ data class ItineraryItem(
     val endTime: String? = null,
     val notes: String? = null,
     val bookingRef: String? = null,
+    val linkedExpenseId: String? = null,
     val confirmationUrl: String? = null,
     val sortOrder: Int = 0
 )

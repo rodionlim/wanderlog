@@ -21,6 +21,17 @@ class ExpenseRepositoryImpl @Inject constructor(
     override suspend fun insertExpense(expense: Expense) =
         dao.insertExpense(ExpenseEntity.fromDomain(expense))
 
+    override suspend fun updateExpense(expense: Expense) =
+        dao.updateExpense(
+            id = expense.id,
+            title = expense.title,
+            amount = expense.amount,
+            currencyCode = expense.currencyCode,
+            category = expense.category.name,
+            date = expense.date,
+            notes = expense.notes
+        )
+
     override suspend fun deleteExpense(expense: Expense) =
         dao.deleteExpense(ExpenseEntity.fromDomain(expense))
 }
