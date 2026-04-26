@@ -39,6 +39,11 @@
 -keep @androidx.room.Entity class * { *; }
 -keep @androidx.room.Dao class * { *; }
 
+# PdfBox Android
+# JPXFilter has an optional JPEG2000 decoder reference that is not bundled.
+# Release minification should not fail when that decoder is absent.
+-dontwarn com.gemalto.jp2.**
+
 # Keep enums
 -keepclassmembers enum * {
     public static **[] values();
