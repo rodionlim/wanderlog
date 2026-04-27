@@ -60,4 +60,10 @@ sealed class Screen(val route: String) {
         fun createRoute(attachmentId: String) = "attachment_viewer/$attachmentId"
         const val ARG_ATTACHMENT_ID = "attachmentId"
     }
+
+    data object ItemAttachments : Screen("item_attachments/{tripId}/{itemId}") {
+        fun createRoute(tripId: String, itemId: String) = "item_attachments/$tripId/$itemId"
+        const val ARG_TRIP_ID = "tripId"
+        const val ARG_ITEM_ID = "itemId"
+    }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,17 +25,25 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.wanderlog.android.core.util.ApproximateCurrencyConverter
+import com.wanderlog.android.core.util.BudgetDisplayCurrencies
 import com.wanderlog.android.core.ui.component.WanderTopBar
 import com.wanderlog.android.core.util.toCurrencyString
 import com.wanderlog.android.domain.model.ExpenseCategory
@@ -45,6 +54,7 @@ fun BudgetScreen(
     viewModel: BudgetViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    var expenseCurrencyMenuExpanded by remember { mutableStateOf(false) }
     val displayedExpenses = if (state.filterCategory == null) state.expenses
                             else state.expenses.filter { it.category == state.filterCategory }
 
@@ -62,14 +72,34 @@ fun BudgetScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                state.budget?.let { budget ->
-                    val progress = (state.totalSpent / budget).coerceIn(0.0, 1.0).toFloat()
+                state.convertedBudget?.let { convertedBudget ->
+                    val progress = (state.totalSpent / convertedBudget).coerceIn(0.0, 1.0).toFloat()
                     Column {
-                        Text("Spent: ${state.totalSpent.toCurrencyString(state.currencyCode)} / ${budget.toCurrencyString(state.currencyCode)}")
+                        Text("Spent: ${state.totalSpent.toCurrencyString(state.displayCurrencyCode)} / ${convertedBudget.toCurrencyString(state.displayCurrencyCode)}")
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                        val originalBudget = state.budget
+                        if (originalBudget != null && state.tripCurrencyCode != state.displayCurrencyCode) {
+                            Text(
+                                "Trip budget entered as ${originalBudget.toCurrencyString(state.tripCurrencyCode)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                } ?: Text("Total spent: ${state.totalSpent.toCurrencyString(state.currencyCode)}")
+                } ?: Text("Total spent: ${state.totalSpent.toCurrencyString(state.displayCurrencyCode)}")
+                Text(
+                    "Display currency: ${state.displayCurrencyCode}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (state.usesApproximateConversion) {
+                    Text(
+                        "Approximate offline FX rates are used when expenses were recorded in different currencies. Change the display currency in Settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
             }
 
@@ -99,6 +129,31 @@ fun BudgetScreen(
                             )
                             OutlinedTextField(value = state.addTitle, onValueChange = viewModel::onTitleChange, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                             OutlinedTextField(value = state.addAmount, onValueChange = viewModel::onAmountChange, label = { Text("Amount") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Expense currency", style = MaterialTheme.typography.bodySmall)
+                                androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(
+                                        onClick = { expenseCurrencyMenuExpanded = true },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("${BudgetDisplayCurrencies.labelFor(state.addCurrencyCode)} (${state.addCurrencyCode})")
+                                    }
+                                    DropdownMenu(
+                                        expanded = expenseCurrencyMenuExpanded,
+                                        onDismissRequest = { expenseCurrencyMenuExpanded = false }
+                                    ) {
+                                        BudgetDisplayCurrencies.options.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text("${option.label} (${option.code})") },
+                                                onClick = {
+                                                    viewModel.onCurrencyCodeChange(option.code)
+                                                    expenseCurrencyMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ExpenseCategory.values().forEach { cat ->
                                     FilterChip(selected = state.addCategory == cat, onClick = { viewModel.onCategoryChange(cat) }, label = { Text(cat.name.take(4)) })
@@ -128,9 +183,33 @@ fun BudgetScreen(
                             Text(expense.category.name.lowercase().replaceFirstChar { it.uppercase() },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (expense.currencyCode != state.displayCurrencyCode) {
+                                Text(
+                                    "Original: ${expense.amount.toCurrencyString(expense.currencyCode)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
-                        Text(expense.amount.toCurrencyString(expense.currencyCode),
-                            style = MaterialTheme.typography.titleMedium)
+                        val displayAmount = ApproximateCurrencyConverter.convert(
+                            amount = expense.amount,
+                            fromCurrency = expense.currencyCode,
+                            toCurrency = state.displayCurrencyCode
+                        )
+                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+                            Text(
+                                text = displayAmount.toCurrencyString(state.displayCurrencyCode),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            if (expense.currencyCode != state.displayCurrencyCode) {
+                                Text(
+                                    text = "Approx.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(4.dp))
                         IconButton(onClick = { viewModel.deleteExpense(expense) }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete")
                         }

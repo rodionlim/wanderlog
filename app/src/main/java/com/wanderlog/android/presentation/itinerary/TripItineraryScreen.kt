@@ -60,7 +60,6 @@ import com.wanderlog.android.core.ui.component.ConfirmDialog
 import com.wanderlog.android.core.ui.component.WanderTopBar
 import com.wanderlog.android.core.ui.component.destinationVisualFor
 import com.wanderlog.android.core.util.toCompactSlashDisplay
-import com.wanderlog.android.core.util.localAttachmentId
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.Place
 import com.wanderlog.android.presentation.ai.fileImport.FileImportSheet
@@ -81,18 +80,20 @@ fun TripItineraryScreen(
     onOpenPacking: () -> Unit,
     onOpenAiGenerate: () -> Unit,
     onOpenAskTrip: () -> Unit,
+    onOpenItemAttachments: (String) -> Unit,
     onOpenSync: () -> Unit,
     onOpenAttachments: () -> Unit,
-    onOpenAttachment: (String) -> Unit,
     viewModel: TripItineraryViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
     val items by viewModel.itemsForDay.collectAsState()
+    val activeHotels = state.activeHotelsForSelectedDay
 
     var showItemForm by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<ItineraryItem?>(null) }
     var showPlaceSearch by remember { mutableStateOf(false) }
     var selectedPlaceForForm by remember { mutableStateOf<Place?>(null) }
+    var initialPlaceQuery by remember { mutableStateOf<String?>(null) }
     var showFileImport by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<ItineraryItem?>(null) }
     var showOverflowMenu by remember { mutableStateOf(false) }
@@ -274,7 +275,7 @@ fun TripItineraryScreen(
                         }
                     }
 
-                    if (items.isEmpty()) {
+                    if (items.isEmpty() && activeHotels.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("No items. Tap + to add.")
                         }
@@ -285,6 +286,29 @@ fun TripItineraryScreen(
                             contentPadding = PaddingValues(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            if (activeHotels.isNotEmpty()) {
+                                item(key = "active-hotels-header") {
+                                    Text(
+                                        text = "Where you're staying",
+                                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                items(activeHotels, key = { "active-hotel-${it.id}" }) { item ->
+                                    ItineraryItemCard(
+                                        item = item,
+                                        linkedExpense = item.linkedExpenseId?.let(state.linkedExpensesById::get),
+                                        attachmentCount = state.attachmentCountsByItemId[item.id] ?: 0,
+                                        onManageAttachments = if ((state.attachmentCountsByItemId[item.id] ?: 0) > 0) {
+                                            { onOpenItemAttachments(item.id) }
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                }
+                            }
+
                             items(items, key = { it.id }) { item ->
                                 ReorderableItem(reorderableState, key = item.id) { isDragging ->
                                     val dismissState = rememberSwipeToDismissBoxState(
@@ -302,12 +326,15 @@ fun TripItineraryScreen(
                                         ItineraryItemCard(
                                             item = item,
                                             linkedExpense = item.linkedExpenseId?.let(state.linkedExpensesById::get),
+                                            attachmentCount = state.attachmentCountsByItemId[item.id] ?: 0,
                                             onClick = {
                                                 editingItem = item
                                                 showItemForm = true
                                             },
-                                            onOpenAttachment = item.localAttachmentId()?.let { attachmentId ->
-                                                { onOpenAttachment(attachmentId) }
+                                            onManageAttachments = if ((state.attachmentCountsByItemId[item.id] ?: 0) > 0) {
+                                                { onOpenItemAttachments(item.id) }
+                                            } else {
+                                                null
                                             },
                                             dragHandle = {
                                                 Icon(
@@ -352,7 +379,16 @@ fun TripItineraryScreen(
                             itemToDelete = item
                         }
                     },
-                    onPlaceSearchRequested = { showPlaceSearch = true }
+                    onManageAttachmentsRequested = editingItem?.let { item ->
+                        {
+                            showItemForm = false
+                            onOpenItemAttachments(item.id)
+                        }
+                    },
+                    onPlaceSearchRequested = { query ->
+                        initialPlaceQuery = query
+                        showPlaceSearch = true
+                    }
                 )
             }
         }
@@ -365,6 +401,7 @@ fun TripItineraryScreen(
             sheetState = sheetState
         ) {
             PlaceSearchSheet(
+                initialQuery = initialPlaceQuery,
                 onDismiss = { showPlaceSearch = false },
                 onPlaceSelected = { place ->
                     selectedPlaceForForm = place
@@ -388,7 +425,7 @@ fun TripItineraryScreen(
     }
 
     itemToDelete?.let { item ->
-        val isImportedGroup = item.localAttachmentId() != null
+        val isImportedGroup = (state.importAttachmentCountsByItemId[item.id] ?: 0) > 0
         ConfirmDialog(
             title = if (isImportedGroup) "Delete imported entries" else "Delete item",
             message = if (isImportedGroup) {

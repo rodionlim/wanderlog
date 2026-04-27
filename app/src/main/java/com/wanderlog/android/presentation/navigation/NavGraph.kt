@@ -11,6 +11,7 @@ import com.wanderlog.android.presentation.ai.generate.AiGenerateScreen
 import com.wanderlog.android.presentation.attachments.AttachmentViewerScreen
 import com.wanderlog.android.presentation.attachments.AttachmentsScreen
 import com.wanderlog.android.presentation.budget.BudgetScreen
+import com.wanderlog.android.presentation.itinerary.attachments.ItemAttachmentsScreen
 import com.wanderlog.android.presentation.map.MapScreen
 import com.wanderlog.android.presentation.itinerary.TripItineraryScreen
 import com.wanderlog.android.presentation.packing.PackingScreen
@@ -60,11 +61,9 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
                 onOpenPacking = { navController.navigate(Screen.Packing.createRoute(tripId)) },
                 onOpenAiGenerate = { navController.navigate(Screen.AiGenerate.createRoute(tripId)) },
                 onOpenAskTrip = { navController.navigate(Screen.AskTrip.createRoute(tripId)) },
+                onOpenItemAttachments = { itemId -> navController.navigate(Screen.ItemAttachments.createRoute(tripId, itemId)) },
                 onOpenSync = { navController.navigate(Screen.TripSync.createRoute(tripId)) },
                 onOpenAttachments = { navController.navigate(Screen.Attachments.createRoute(tripId)) },
-                onOpenAttachment = { attachmentId ->
-                    navController.navigate(Screen.AttachmentViewer.createRoute(attachmentId))
-                }
             )
         }
 
@@ -136,6 +135,21 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
             arguments = listOf(navArgument(Screen.AttachmentViewer.ARG_ATTACHMENT_ID) { type = NavType.StringType })
         ) {
             AttachmentViewerScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Screen.ItemAttachments.route,
+            arguments = listOf(
+                navArgument(Screen.ItemAttachments.ARG_TRIP_ID) { type = NavType.StringType },
+                navArgument(Screen.ItemAttachments.ARG_ITEM_ID) { type = NavType.StringType }
+            )
+        ) {
+            ItemAttachmentsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenAttachment = { attachmentId ->
+                    navController.navigate(Screen.AttachmentViewer.createRoute(attachmentId))
+                }
+            )
         }
 
         composable(Screen.ShareImport.route) {

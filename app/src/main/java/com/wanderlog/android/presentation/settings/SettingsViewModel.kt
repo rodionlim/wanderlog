@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.wanderlog.android.core.util.BudgetDisplayCurrencies
 import com.wanderlog.android.data.sync.SyncTombstoneResetter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +21,7 @@ const val KEY_OPENAI_API_KEY = "openai_api_key"
 const val KEY_MAPS_API_KEY = "maps_api_key"
 const val KEY_OPENAI_MODEL = "openai_model"
 const val KEY_OPENAI_PARSING_MODEL = "openai_parsing_model"
+const val KEY_BUDGET_DISPLAY_CURRENCY = "budget_display_currency"
 
 data class OpenAiModelOption(
     val id: String,
@@ -93,6 +95,7 @@ data class SettingsState(
     val mapsKey: String = "",
     val openAiModel: String = OpenAiModels.DEFAULT_MODEL,
     val openAiParsingModel: String = OpenAiModels.DEFAULT_PARSING_MODEL,
+    val budgetDisplayCurrency: String = BudgetDisplayCurrencies.DEFAULT,
     val resetInProgress: Boolean = false,
     val resetMessage: String? = null,
     val saved: Boolean = false
@@ -128,6 +131,9 @@ class SettingsViewModel @Inject constructor(
                 openAiModel = OpenAiModels.sanitize(prefs.getString(KEY_OPENAI_MODEL, OpenAiModels.DEFAULT_MODEL)),
                 openAiParsingModel = OpenAiModels.sanitizeParsingModel(
                     prefs.getString(KEY_OPENAI_PARSING_MODEL, OpenAiModels.DEFAULT_PARSING_MODEL)
+                ),
+                budgetDisplayCurrency = BudgetDisplayCurrencies.sanitize(
+                    prefs.getString(KEY_BUDGET_DISPLAY_CURRENCY, BudgetDisplayCurrencies.DEFAULT)
                 )
             )
         }
@@ -138,6 +144,8 @@ class SettingsViewModel @Inject constructor(
     fun onOpenAiModelChange(v: String) = _state.update { it.copy(openAiModel = OpenAiModels.sanitize(v)) }
     fun onOpenAiParsingModelChange(v: String) =
         _state.update { it.copy(openAiParsingModel = OpenAiModels.sanitizeParsingModel(v)) }
+    fun onBudgetDisplayCurrencyChange(v: String) =
+        _state.update { it.copy(budgetDisplayCurrency = BudgetDisplayCurrencies.sanitize(v)) }
 
     fun save() {
         prefs.edit()
@@ -147,6 +155,10 @@ class SettingsViewModel @Inject constructor(
             .putString(
                 KEY_OPENAI_PARSING_MODEL,
                 OpenAiModels.sanitizeParsingModel(_state.value.openAiParsingModel)
+            )
+            .putString(
+                KEY_BUDGET_DISPLAY_CURRENCY,
+                BudgetDisplayCurrencies.sanitize(_state.value.budgetDisplayCurrency)
             )
             .apply()
         _state.update { it.copy(saved = true) }
@@ -211,6 +223,16 @@ class SettingsViewModel @Inject constructor(
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
             return OpenAiModels.sanitizeParsingModel(
                 prefs.getString(KEY_OPENAI_PARSING_MODEL, OpenAiModels.DEFAULT_PARSING_MODEL)
+            )
+        }
+
+        fun getBudgetDisplayCurrency(context: Context): String {
+            val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+            val prefs = EncryptedSharedPreferences.create(context, PREFS_NAME, masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+            return BudgetDisplayCurrencies.sanitize(
+                prefs.getString(KEY_BUDGET_DISPLAY_CURRENCY, BudgetDisplayCurrencies.DEFAULT)
             )
         }
     }

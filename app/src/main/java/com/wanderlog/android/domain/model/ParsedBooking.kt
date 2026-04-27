@@ -25,7 +25,9 @@ data class ParsedHotel(
     val address: String? = null,
     val checkIn: String? = null,
     val checkOut: String? = null,
-    val bookingRef: String? = null
+    val bookingRef: String? = null,
+    val price: String? = null,
+    val hostPhone: String? = null
 )
 
 data class ParsedActivity(

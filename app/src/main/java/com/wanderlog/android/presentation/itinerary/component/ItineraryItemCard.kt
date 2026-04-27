@@ -52,9 +52,10 @@ import com.wanderlog.android.domain.model.ItineraryItemType
 fun ItineraryItemCard(
     item: ItineraryItem,
     linkedExpense: Expense? = null,
+    attachmentCount: Int = 0,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    onOpenAttachment: (() -> Unit)? = null,
+    onManageAttachments: (() -> Unit)? = null,
     dragHandle: @Composable (() -> Unit)? = null
 ) {
     val accent = item.itemType.accent()
@@ -176,8 +177,8 @@ fun ItineraryItemCard(
                         maxLines = 3
                     )
                 }
-                if (onOpenAttachment != null) {
-                    TextButton(onClick = onOpenAttachment, modifier = Modifier.padding(top = 2.dp)) {
+                if (onManageAttachments != null && attachmentCount > 0) {
+                    TextButton(onClick = onManageAttachments, modifier = Modifier.padding(top = 2.dp)) {
                         Icon(
                             imageVector = Icons.Default.AttachFile,
                             contentDescription = null,
@@ -185,7 +186,10 @@ fun ItineraryItemCard(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text("Open attachment", color = accent)
+                        Text(
+                            if (attachmentCount == 1) "1 attachment" else "$attachmentCount attachments",
+                            color = accent
+                        )
                     }
                 }
             }

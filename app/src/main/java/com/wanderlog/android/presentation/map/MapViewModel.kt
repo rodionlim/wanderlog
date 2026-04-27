@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.repository.ItineraryRepository
+import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
 import com.wanderlog.android.presentation.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,6 +30,7 @@ data class MapUiState(
 class MapViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val itineraryRepository: ItineraryRepository,
+    private val placesRepository: PlacesRepository,
     private val tripRepository: TripRepository,
     @ApplicationContext context: Context
 ) : ViewModel() {
@@ -38,6 +40,7 @@ class MapViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
+    private val attemptedResolutionIds = mutableSetOf<String>()
 
     init {
         _state.update { it.copy(mapError = resolveMapError(context)) }
@@ -49,6 +52,7 @@ class MapViewModel @Inject constructor(
                 itineraryRepository.getItemsForTrip(tripId)
 
             flow.collect { all ->
+                resolveMissingCoordinates(all)
                 val mappable = all.filter { item ->
                     item.place?.latitude != null &&
                         item.place.longitude != null &&
@@ -60,6 +64,50 @@ class MapViewModel @Inject constructor(
     }
 
     fun selectItem(id: String?) = _state.update { it.copy(selectedItemId = id) }
+
+    private suspend fun resolveMissingCoordinates(items: List<ItineraryItem>) {
+        items
+            .asSequence()
+            .filterNot { it.id in attemptedResolutionIds }
+            .filter { it.place?.latitude == null || it.place.longitude == null }
+            .filter { it.place != null }
+            .forEach { item ->
+                attemptedResolutionIds += item.id
+
+                val resolvedPlace = resolvePlace(item)
+                if (resolvedPlace?.latitude != null && resolvedPlace.longitude != null) {
+                    itineraryRepository.updateItem(item.copy(place = resolvedPlace))
+                }
+            }
+    }
+
+    private suspend fun resolvePlace(item: ItineraryItem) = runCatching {
+        val place = item.place ?: return@runCatching null
+        val queries = buildList {
+            place.address?.trim()?.takeIf { it.isNotBlank() }?.let { address ->
+                add(address)
+                place.name.trim().takeIf { it.isNotBlank() }?.let { name ->
+                    if (!address.contains(name, ignoreCase = true)) {
+                        add("$name $address")
+                    }
+                }
+            }
+            place.name.trim().takeIf { it.isNotBlank() }?.let(::add)
+        }.distinct()
+
+        for (query in queries) {
+            val match = placesRepository.searchPlaces(query, null).firstOrNull() ?: continue
+            val details = match.placeId?.let { placesRepository.fetchPlaceDetails(it) } ?: match
+            if (details.latitude != null && details.longitude != null) {
+                return@runCatching details.copy(
+                    name = place.name.ifBlank { details.name },
+                    address = place.address ?: details.address
+                )
+            }
+        }
+
+        null
+    }.getOrNull()
 
     private fun shouldPlotOnMap(item: ItineraryItem, tripDestination: String): Boolean {
         if (item.itemType != ItineraryItemType.FLIGHT) {

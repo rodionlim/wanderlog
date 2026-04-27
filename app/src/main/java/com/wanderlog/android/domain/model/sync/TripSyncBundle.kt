@@ -8,6 +8,7 @@ data class TripSyncBundle(
     val trip: SyncTripPayload,
     val tripDays: List<SyncTripDayPayload> = emptyList(),
     val itineraryItems: List<SyncItineraryItemPayload> = emptyList(),
+    val itemAttachmentLinks: List<SyncItemAttachmentLinkPayload> = emptyList(),
     val expenses: List<SyncExpensePayload> = emptyList(),
     val packingItems: List<SyncPackingItemPayload> = emptyList(),
     val attachments: List<SyncAttachmentPayload> = emptyList()
@@ -20,6 +21,7 @@ data class TripSyncBundle(
             add(trip.toManifestRecord())
             addAll(tripDays.map(SyncTripDayPayload::toManifestRecord))
             addAll(itineraryItems.map(SyncItineraryItemPayload::toManifestRecord))
+            addAll(itemAttachmentLinks.map(SyncItemAttachmentLinkPayload::toManifestRecord))
             addAll(expenses.map(SyncExpensePayload::toManifestRecord))
             addAll(packingItems.map(SyncPackingItemPayload::toManifestRecord))
             addAll(attachments.map(SyncAttachmentPayload::toManifestRecord))
@@ -75,6 +77,15 @@ data class SyncItineraryItemPayload(
     val linkedExpenseId: String? = null,
     val confirmationUrl: String? = null,
     val sortOrder: Int,
+    val metadata: SyncMetadata
+)
+
+data class SyncItemAttachmentLinkPayload(
+    val id: String,
+    val tripId: String,
+    val itineraryItemId: String,
+    val attachmentId: String,
+    val linkType: String,
     val metadata: SyncMetadata
 )
 
@@ -141,6 +152,14 @@ fun SyncItineraryItemPayload.toSyncRecord(): TripSyncRecord = TripSyncRecord(
     lastModifiedByDeviceId = metadata.lastModifiedByDeviceId
 )
 
+fun SyncItemAttachmentLinkPayload.toSyncRecord(): TripSyncRecord = TripSyncRecord(
+    entityType = SyncEntityType.ITEM_ATTACHMENT_LINK,
+    id = id,
+    updatedAt = metadata.updatedAt,
+    deletedAt = metadata.deletedAt,
+    lastModifiedByDeviceId = metadata.lastModifiedByDeviceId
+)
+
 fun SyncExpensePayload.toSyncRecord(): TripSyncRecord = TripSyncRecord(
     entityType = SyncEntityType.EXPENSE,
     id = id,
@@ -170,6 +189,7 @@ fun SyncAttachmentPayload.toSyncRecord(): TripSyncRecord = TripSyncRecord(
 private fun SyncTripPayload.toManifestRecord(): TripSyncRecord = toSyncRecord()
 private fun SyncTripDayPayload.toManifestRecord(): TripSyncRecord = toSyncRecord()
 private fun SyncItineraryItemPayload.toManifestRecord(): TripSyncRecord = toSyncRecord()
+private fun SyncItemAttachmentLinkPayload.toManifestRecord(): TripSyncRecord = toSyncRecord()
 private fun SyncExpensePayload.toManifestRecord(): TripSyncRecord = toSyncRecord()
 private fun SyncPackingItemPayload.toManifestRecord(): TripSyncRecord = toSyncRecord()
 private fun SyncAttachmentPayload.toManifestRecord(): TripSyncRecord = toSyncRecord()

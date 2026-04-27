@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.wanderlog.android.data.local.dao.AttachmentDao
+import com.wanderlog.android.data.local.dao.ItineraryItemAttachmentLinkDao
 import com.wanderlog.android.data.local.entity.AttachmentEntity
 import com.wanderlog.android.data.sync.SyncMetadataStamp
 import com.wanderlog.android.domain.model.Attachment
@@ -19,6 +20,7 @@ import javax.inject.Inject
 
 class AttachmentRepositoryImpl @Inject constructor(
     private val dao: AttachmentDao,
+    private val linkDao: ItineraryItemAttachmentLinkDao,
     private val syncMetadataStamp: SyncMetadataStamp,
     @ApplicationContext private val context: Context
 ) : AttachmentRepository {
@@ -71,6 +73,11 @@ class AttachmentRepositoryImpl @Inject constructor(
         val now = syncMetadataStamp.now()
         val deviceId = syncMetadataStamp.currentDeviceId()
         getFile(attachment).delete()
+        linkDao.markDeletedForAttachment(
+            attachmentId = attachment.id,
+            deletedAt = now,
+            lastModifiedByDeviceId = deviceId
+        )
         dao.markDeleted(
             attachmentId = attachment.id,
             deletedAt = now,

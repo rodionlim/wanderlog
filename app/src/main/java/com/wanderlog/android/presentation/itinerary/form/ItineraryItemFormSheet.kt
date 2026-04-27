@@ -41,7 +41,8 @@ fun ItineraryItemFormSheet(
     onSelectedPlaceApplied: () -> Unit = {},
     onDismiss: () -> Unit,
     onDeleteRequested: (() -> Unit)? = null,
-    onPlaceSearchRequested: () -> Unit,
+    onManageAttachmentsRequested: (() -> Unit)? = null,
+    onPlaceSearchRequested: (String?) -> Unit,
     viewModel: ItineraryItemFormViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -90,8 +91,17 @@ fun ItineraryItemFormSheet(
             }
         }
 
-        OutlinedButton(onClick = onPlaceSearchRequested, modifier = Modifier.fillMaxWidth()) {
-            Text(state.place?.name ?: "Search & add place")
+        OutlinedButton(
+            onClick = {
+                onPlaceSearchRequested(
+                    state.place?.address
+                        ?: state.place?.name
+                        ?: state.title.takeIf { it.isNotBlank() }
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(state.place?.address ?: state.place?.name ?: "Search & add place")
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -147,6 +157,15 @@ fun ItineraryItemFormSheet(
             onClick = { viewModel.save(tripId, dayId, dayDate, currencyCode, editingItem?.id) },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Save") }
+
+        if (editingItem != null && onManageAttachmentsRequested != null) {
+            OutlinedButton(
+                onClick = onManageAttachmentsRequested,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Manage attachments")
+            }
+        }
 
         if (editingItem != null && onDeleteRequested != null) {
             OutlinedButton(

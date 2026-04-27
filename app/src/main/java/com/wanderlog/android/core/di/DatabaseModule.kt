@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.wanderlog.android.data.local.WanderlogDatabase
 import com.wanderlog.android.data.local.dao.AttachmentDao
 import com.wanderlog.android.data.local.dao.ExpenseDao
+import com.wanderlog.android.data.local.dao.ItineraryItemAttachmentLinkDao
 import com.wanderlog.android.data.local.dao.ItineraryItemDao
 import com.wanderlog.android.data.local.dao.PackingItemDao
 import com.wanderlog.android.data.local.dao.TripDao
@@ -28,12 +29,14 @@ object DatabaseModule {
             .addMigrations(WanderlogDatabase.MIGRATION_3_4)
             .addMigrations(WanderlogDatabase.MIGRATION_4_5)
             .addMigrations(WanderlogDatabase.MIGRATION_5_6)
+            .addMigrations(WanderlogDatabase.MIGRATION_6_7)
             .fallbackToDestructiveMigration()
             .build()
 
     @Provides fun provideTripDao(db: WanderlogDatabase): TripDao = db.tripDao()
     @Provides fun provideTripDayDao(db: WanderlogDatabase): TripDayDao = db.tripDayDao()
     @Provides fun provideItineraryItemDao(db: WanderlogDatabase): ItineraryItemDao = db.itineraryItemDao()
+    @Provides fun provideItineraryItemAttachmentLinkDao(db: WanderlogDatabase): ItineraryItemAttachmentLinkDao = db.itineraryItemAttachmentLinkDao()
     @Provides fun provideExpenseDao(db: WanderlogDatabase): ExpenseDao = db.expenseDao()
     @Provides fun providePackingItemDao(db: WanderlogDatabase): PackingItemDao = db.packingItemDao()
     @Provides fun provideAttachmentDao(db: WanderlogDatabase): AttachmentDao = db.attachmentDao()

@@ -4,12 +4,14 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
@@ -18,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +44,8 @@ fun FileImportSheet(
     val step by viewModel.step.collectAsState()
     var selectedHint by remember { mutableStateOf<DocumentHint?>(null) }
     var rasterizePdfAsImages by remember { mutableStateOf(false) }
+    var showPasteTextInput by remember { mutableStateOf(false) }
+    var pastedText by remember { mutableStateOf("") }
 
     LaunchedEffect(step) {
         if (step is FileImportStep.Done) onDismiss()
@@ -71,7 +76,9 @@ fun FileImportSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+            .imePadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Import Booking", style = MaterialTheme.typography.titleLarge)
@@ -129,6 +136,49 @@ fun FileImportSheet(
                     onClick = { textLauncher.launch(arrayOf("text/plain", "text/csv")) },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Import Text / CSV") }
+                OutlinedButton(
+                    onClick = { showPasteTextInput = !showPasteTextInput },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showPasteTextInput) "Hide Paste Text" else "Paste Text")
+                }
+                if (showPasteTextInput) {
+                    Text(
+                        "Paste an email body or any booking text here. This is useful when your mail app cannot share directly into Wanderlog.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = pastedText,
+                        onValueChange = { pastedText = it },
+                        label = { Text("Booking text") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 6
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                pastedText = ""
+                                showPasteTextInput = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancel")
+                        }
+                        Button(
+                            onClick = {
+                                viewModel.parseText(pastedText.trim(), tripId, selectedHint)
+                            },
+                            enabled = pastedText.isNotBlank(),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Import Pasted Text")
+                        }
+                    }
+                }
                 Text(
                     "Use multiple files when one booking is split across PDFs, screenshots, or text exports.",
                     style = MaterialTheme.typography.bodySmall,

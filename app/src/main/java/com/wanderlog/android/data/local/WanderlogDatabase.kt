@@ -8,12 +8,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.wanderlog.android.data.local.converter.RoomConverters
 import com.wanderlog.android.data.local.dao.AttachmentDao
 import com.wanderlog.android.data.local.dao.ExpenseDao
+import com.wanderlog.android.data.local.dao.ItineraryItemAttachmentLinkDao
 import com.wanderlog.android.data.local.dao.ItineraryItemDao
 import com.wanderlog.android.data.local.dao.PackingItemDao
 import com.wanderlog.android.data.local.dao.TripDao
 import com.wanderlog.android.data.local.dao.TripDayDao
 import com.wanderlog.android.data.local.entity.AttachmentEntity
 import com.wanderlog.android.data.local.entity.ExpenseEntity
+import com.wanderlog.android.data.local.entity.ItineraryItemAttachmentLinkEntity
 import com.wanderlog.android.data.local.entity.ItineraryItemEntity
 import com.wanderlog.android.data.local.entity.PackingItemEntity
 import com.wanderlog.android.data.local.entity.TripDayEntity
@@ -24,11 +26,12 @@ import com.wanderlog.android.data.local.entity.TripEntity
         TripEntity::class,
         TripDayEntity::class,
         ItineraryItemEntity::class,
+        ItineraryItemAttachmentLinkEntity::class,
         ExpenseEntity::class,
         PackingItemEntity::class,
         AttachmentEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(RoomConverters::class)
@@ -36,6 +39,7 @@ abstract class WanderlogDatabase : RoomDatabase() {
     abstract fun tripDao(): TripDao
     abstract fun tripDayDao(): TripDayDao
     abstract fun itineraryItemDao(): ItineraryItemDao
+    abstract fun itineraryItemAttachmentLinkDao(): ItineraryItemAttachmentLinkDao
     abstract fun expenseDao(): ExpenseDao
     abstract fun packingItemDao(): PackingItemDao
     abstract fun attachmentDao(): AttachmentDao
@@ -148,6 +152,71 @@ abstract class WanderlogDatabase : RoomDatabase() {
                 )
                 database.execSQL(
                     "UPDATE attachments SET updated_at = created_at"
+                )
+            }
+        }
+
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS item_attachment_links (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        trip_id TEXT NOT NULL,
+                        itinerary_item_id TEXT NOT NULL,
+                        attachment_id TEXT NOT NULL,
+                        link_type TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        deleted_at INTEGER,
+                        last_modified_by_device_id TEXT NOT NULL,
+                        FOREIGN KEY(trip_id) REFERENCES trips(id) ON DELETE CASCADE,
+                        FOREIGN KEY(itinerary_item_id) REFERENCES itinerary_items(id) ON DELETE CASCADE,
+                        FOREIGN KEY(attachment_id) REFERENCES attachments(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_item_attachment_links_trip_id ON item_attachment_links(trip_id)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_item_attachment_links_itinerary_item_id ON item_attachment_links(itinerary_item_id)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_item_attachment_links_attachment_id ON item_attachment_links(attachment_id)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_item_attachment_links_itinerary_item_id_attachment_id ON item_attachment_links(itinerary_item_id, attachment_id)"
+                )
+                database.execSQL(
+                    """
+                    INSERT INTO item_attachment_links (
+                        id,
+                        trip_id,
+                        itinerary_item_id,
+                        attachment_id,
+                        link_type,
+                        created_at,
+                        updated_at,
+                        deleted_at,
+                        last_modified_by_device_id
+                    )
+                    SELECT
+                        itinerary_items.id || '__' || substr(itinerary_items.confirmation_url, 14),
+                        itinerary_items.trip_id,
+                        itinerary_items.id,
+                        substr(itinerary_items.confirmation_url, 14),
+                        'IMPORT_SOURCE',
+                        itinerary_items.updated_at,
+                        itinerary_items.updated_at,
+                        NULL,
+                        itinerary_items.last_modified_by_device_id
+                    FROM itinerary_items
+                    WHERE itinerary_items.confirmation_url LIKE 'attachment://%'
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    "UPDATE itinerary_items SET confirmation_url = NULL WHERE confirmation_url LIKE 'attachment://%'"
                 )
             }
         }

@@ -11,11 +11,6 @@ fun ByteArray.toDataUri(mimeType: String): String = "data:$mimeType;base64,${toB
 fun Double.toCurrencyString(currencyCode: String): String =
     "$currencyCode %.2f".format(this)
 
-fun ItineraryItem.localAttachmentId(): String? =
-    confirmationUrl
-        ?.takeIf { it.startsWith("attachment://") }
-        ?.removePrefix("attachment://")
-
 fun ItineraryItem.flightDetailLine(prefix: String): String? =
     notes
         ?.lineSequence()

@@ -24,6 +24,7 @@ import com.wanderlog.android.domain.model.Place
 
 @Composable
 fun PlaceSearchSheet(
+    initialQuery: String? = null,
     onDismiss: () -> Unit,
     onPlaceSelected: ((Place) -> Unit)? = null,
     viewModel: PlaceSearchViewModel = hiltViewModel()
@@ -68,7 +69,7 @@ fun PlaceSearchSheet(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.clearSelection()
+    LaunchedEffect(initialQuery) {
+        viewModel.initializeQuery(initialQuery)
     }
 }

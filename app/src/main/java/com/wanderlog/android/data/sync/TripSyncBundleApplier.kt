@@ -6,18 +6,21 @@ import com.wanderlog.android.core.util.TravellerProfilesCodec
 import com.wanderlog.android.data.local.WanderlogDatabase
 import com.wanderlog.android.data.local.dao.AttachmentDao
 import com.wanderlog.android.data.local.dao.ExpenseDao
+import com.wanderlog.android.data.local.dao.ItineraryItemAttachmentLinkDao
 import com.wanderlog.android.data.local.dao.ItineraryItemDao
 import com.wanderlog.android.data.local.dao.PackingItemDao
 import com.wanderlog.android.data.local.dao.TripDao
 import com.wanderlog.android.data.local.dao.TripDayDao
 import com.wanderlog.android.data.local.entity.AttachmentEntity
 import com.wanderlog.android.data.local.entity.ExpenseEntity
+import com.wanderlog.android.data.local.entity.ItineraryItemAttachmentLinkEntity
 import com.wanderlog.android.data.local.entity.ItineraryItemEntity
 import com.wanderlog.android.data.local.entity.PackingItemEntity
 import com.wanderlog.android.data.local.entity.TripDayEntity
 import com.wanderlog.android.data.local.entity.TripEntity
 import com.wanderlog.android.domain.model.sync.SyncAttachmentPayload
 import com.wanderlog.android.domain.model.sync.SyncExpensePayload
+import com.wanderlog.android.domain.model.sync.SyncItemAttachmentLinkPayload
 import com.wanderlog.android.domain.model.sync.SyncItineraryItemPayload
 import com.wanderlog.android.domain.model.sync.SyncPackingItemPayload
 import com.wanderlog.android.domain.model.sync.SyncTripDayPayload
@@ -44,6 +47,7 @@ class TripSyncBundleApplier @Inject constructor(
     private val tripDao: TripDao,
     private val tripDayDao: TripDayDao,
     private val itineraryItemDao: ItineraryItemDao,
+    private val itineraryItemAttachmentLinkDao: ItineraryItemAttachmentLinkDao,
     private val expenseDao: ExpenseDao,
     private val packingItemDao: PackingItemDao,
     private val attachmentDao: AttachmentDao,
@@ -72,11 +76,14 @@ class TripSyncBundleApplier @Inject constructor(
         for (item in bundle.itineraryItems) {
             if (applyItineraryItem(item)) applied++ else skipped++
         }
-        for (packingItem in bundle.packingItems) {
-            if (applyPackingItem(packingItem)) applied++ else skipped++
-        }
         for (attachment in bundle.attachments) {
             if (applyAttachment(attachment)) applied++ else skipped++
+        }
+        for (itemAttachmentLink in bundle.itemAttachmentLinks) {
+            if (applyItemAttachmentLink(itemAttachmentLink)) applied++ else skipped++
+        }
+        for (packingItem in bundle.packingItems) {
+            if (applyPackingItem(packingItem)) applied++ else skipped++
         }
 
         return TripSyncApplyResult(appliedRecords = applied, skippedRecords = skipped)
@@ -129,6 +136,17 @@ class TripSyncBundleApplier @Inject constructor(
 
         val existing = packingItemDao.getByIdIncludingDeleted(payload.id)
         packingItemDao.insertItem(payload.toEntity(existing?.createdAt ?: payload.metadata.updatedAt))
+        return true
+    }
+
+    private suspend fun applyItemAttachmentLink(payload: SyncItemAttachmentLinkPayload): Boolean {
+        val local = itineraryItemAttachmentLinkDao.getByIdIncludingDeleted(payload.id)?.toSyncPayload()?.toSyncRecord()
+        if (!SyncMergePolicy.shouldApplyIncoming(local, payload.toSyncRecord())) return false
+
+        val existing = itineraryItemAttachmentLinkDao.getByIdIncludingDeleted(payload.id)
+        itineraryItemAttachmentLinkDao.insert(
+            payload.toEntity(existing?.createdAt ?: payload.metadata.updatedAt)
+        )
         return true
     }
 
@@ -270,6 +288,32 @@ private fun SyncPackingItemPayload.toEntity(createdAt: Long): PackingItemEntity 
     updatedAt = metadata.updatedAt,
     deletedAt = metadata.deletedAt,
     lastModifiedByDeviceId = metadata.lastModifiedByDeviceId
+)
+
+private fun SyncItemAttachmentLinkPayload.toEntity(createdAt: Long): ItineraryItemAttachmentLinkEntity =
+    ItineraryItemAttachmentLinkEntity(
+        id = id,
+        tripId = tripId,
+        itineraryItemId = itineraryItemId,
+        attachmentId = attachmentId,
+        linkType = linkType,
+        createdAt = createdAt,
+        updatedAt = metadata.updatedAt,
+        deletedAt = metadata.deletedAt,
+        lastModifiedByDeviceId = metadata.lastModifiedByDeviceId
+    )
+
+private fun ItineraryItemAttachmentLinkEntity.toSyncPayload(): SyncItemAttachmentLinkPayload = SyncItemAttachmentLinkPayload(
+    id = id,
+    tripId = tripId,
+    itineraryItemId = itineraryItemId,
+    attachmentId = attachmentId,
+    linkType = linkType,
+    metadata = com.wanderlog.android.domain.model.sync.SyncMetadata(
+        updatedAt = updatedAt,
+        deletedAt = deletedAt,
+        lastModifiedByDeviceId = lastModifiedByDeviceId
+    )
 )
 
 private fun SyncAttachmentPayload.toEntity(): AttachmentEntity = AttachmentEntity(

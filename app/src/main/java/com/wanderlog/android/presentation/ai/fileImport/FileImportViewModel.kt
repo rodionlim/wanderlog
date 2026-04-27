@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.domain.model.Expense
 import com.wanderlog.android.domain.model.ExpenseCategory
+import com.wanderlog.android.domain.model.ItemAttachmentLinkType
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.model.ParsedBooking
@@ -15,6 +16,7 @@ import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripDay
 import com.wanderlog.android.domain.repository.AttachmentRepository
 import com.wanderlog.android.domain.repository.ItineraryRepository
+import com.wanderlog.android.domain.repository.ItineraryItemAttachmentRepository
 import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
 import com.wanderlog.android.core.util.ImportedMoneyParser
@@ -56,6 +58,7 @@ class FileImportViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val attachmentRepository: AttachmentRepository,
     private val itineraryRepository: ItineraryRepository,
+    private val itineraryItemAttachmentRepository: ItineraryItemAttachmentRepository,
     private val placesRepository: PlacesRepository,
     private val addExpense: AddExpenseUseCase
 ) : ViewModel() {
@@ -132,17 +135,15 @@ class FileImportViewModel @Inject constructor(
                     }
                     attachmentRepository.importFromUri(tripId, uri, label)
                 }
-                val attachmentReference = importedAttachments.firstOrNull()?.let { attachment ->
-                    "attachment://${attachment.id}"
+                itineraryRepository.insertItems(items)
+                importedAttachments.forEach { attachment ->
+                    itineraryItemAttachmentRepository.addAttachmentToItems(
+                        tripId = tripId,
+                        itemIds = items.map(ItineraryItem::id),
+                        attachmentId = attachment.id,
+                        linkType = ItemAttachmentLinkType.IMPORT_SOURCE
+                    )
                 }
-
-                val linkedItems = if (attachmentReference == null) items else {
-                    items.map { item ->
-                        item.copy(confirmationUrl = item.confirmationUrl ?: attachmentReference)
-                    }
-                }
-
-                itineraryRepository.insertItems(linkedItems)
 
                 review
                     ?.let { createImportedExpenses(it.parsedBooking, tripId, trip?.currencyCode ?: "USD") }
@@ -184,6 +185,9 @@ class FileImportViewModel @Inject constructor(
         val placeCache = mutableMapOf<String, Place?>()
         val linkedExpenseIdsByFlightIndex = buildImportedFlightExpenseCandidates(booking, fallbackCurrencyCode)
             .associate { it.flightIndex to it.expenseId }
+        val linkedExpenseIdsByHotelIndex = buildImportedHotelExpenseCandidates(booking, fallbackCurrencyCode)
+            .mapIndexed { index, candidate -> index to candidate.expenseId }
+            .toMap()
         val result = mutableListOf<ItineraryItem>()
         booking.flights.forEachIndexed { index, f ->
             result.add(ItineraryItem(
@@ -200,7 +204,7 @@ class FileImportViewModel @Inject constructor(
                 linkedExpenseId = linkedExpenseIdsByFlightIndex[index]
             ))
         }
-        booking.hotels.forEach { h ->
+        booking.hotels.forEachIndexed { index, h ->
             result.add(ItineraryItem(
                 id = UUID.randomUUID().toString(),
                 tripDayId = resolveTripDayId(days, h.checkIn ?: h.checkOut, defaultDayId),
@@ -210,7 +214,9 @@ class FileImportViewModel @Inject constructor(
                 place = h.address?.let { Place(name = h.name, address = it) },
                 startTime = h.checkIn,
                 endTime = h.checkOut,
-                bookingRef = h.bookingRef
+                notes = buildHotelNotes(h),
+                bookingRef = h.bookingRef,
+                linkedExpenseId = linkedExpenseIdsByHotelIndex[index]
             ))
         }
         booking.activities.forEach { a ->
@@ -308,6 +314,12 @@ class FileImportViewModel @Inject constructor(
         return "$label: $value$suffix"
     }
 
+    private fun buildHotelNotes(hotel: com.wanderlog.android.domain.model.ParsedHotel): String? {
+        return listOfNotNull(
+            hotel.hostPhone?.takeIf { it.isNotBlank() }?.let { "Host phone: $it" }
+        ).takeIf { it.isNotEmpty() }?.joinToString("\n")
+    }
+
     private fun resolveTripDayId(days: List<TripDay>, dateTime: String?, fallbackDayId: String): String {
         val localDate = parseImportedDate(dateTime) ?: return fallbackDayId
         return days.firstOrNull { it.date == localDate }?.id ?: fallbackDayId
@@ -318,7 +330,7 @@ class FileImportViewModel @Inject constructor(
         tripId: String,
         fallbackCurrencyCode: String
     ): List<Expense> {
-        return buildImportedFlightExpenseCandidates(booking, fallbackCurrencyCode)
+        val flightExpenses = buildImportedFlightExpenseCandidates(booking, fallbackCurrencyCode)
             .groupBy(ImportedFlightExpenseCandidate::groupKey)
             .values
             .map { candidates ->
@@ -341,6 +353,29 @@ class FileImportViewModel @Inject constructor(
                     ).takeIf { it.isNotEmpty() }?.joinToString("\n")
                 )
             }
+
+        val hotelExpenses = buildImportedHotelExpenseCandidates(booking, fallbackCurrencyCode)
+            .groupBy(ImportedHotelExpenseCandidate::groupKey)
+            .values
+            .map { candidates ->
+                val representative = candidates.first()
+                Expense(
+                    id = representative.expenseId,
+                    tripId = tripId,
+                    title = buildHotelExpenseTitle(candidates.map { it.hotel }),
+                    amount = representative.amount,
+                    currencyCode = representative.currencyCode,
+                    category = ExpenseCategory.ACCOMMODATION,
+                    date = parseImportedDate(representative.hotel.checkIn ?: representative.hotel.checkOut),
+                    notes = listOfNotNull(
+                        representative.hotel.bookingRef?.let { "Booking reference: $it" },
+                        representative.hotel.price?.let { "Imported total: $it" },
+                        representative.hotel.hostPhone?.let { "Host phone: $it" }
+                    ).takeIf { it.isNotEmpty() }?.joinToString("\n")
+                )
+            }
+
+        return flightExpenses + hotelExpenses
     }
 
     private fun buildImportedFlightExpenseCandidates(
@@ -368,6 +403,24 @@ class FileImportViewModel @Inject constructor(
         return pricedFlights.map { candidate ->
             val groupKey = buildImportedFlightExpenseGroupKey(candidate, repeatedUnreferencedTotals)
             candidate.copy(
+                groupKey = groupKey,
+                expenseId = UUID.nameUUIDFromBytes(groupKey.toByteArray()).toString()
+            )
+        }
+    }
+
+    private fun buildImportedHotelExpenseCandidates(
+        booking: ParsedBooking,
+        fallbackCurrencyCode: String
+    ): List<ImportedHotelExpenseCandidate> {
+        return booking.hotels.mapNotNull { hotel ->
+            val parsedAmount = parseImportedAmount(hotel.price) ?: return@mapNotNull null
+            val currencyCode = inferCurrencyCode(hotel.price, fallbackCurrencyCode)
+            val groupKey = buildImportedHotelExpenseGroupKey(hotel, parsedAmount, currencyCode)
+            ImportedHotelExpenseCandidate(
+                hotel = hotel,
+                amount = parsedAmount,
+                currencyCode = currencyCode,
                 groupKey = groupKey,
                 expenseId = UUID.nameUUIDFromBytes(groupKey.toByteArray()).toString()
             )
@@ -426,6 +479,29 @@ class FileImportViewModel @Inject constructor(
         return routeSummary?.let { "$label ($it)" } ?: label
     }
 
+    private fun buildImportedHotelExpenseGroupKey(
+        hotel: com.wanderlog.android.domain.model.ParsedHotel,
+        amount: Double,
+        currencyCode: String
+    ): String {
+        val bookingRef = hotel.bookingRef?.trim().orEmpty()
+        return when {
+            bookingRef.isNotBlank() -> "hotel-booking:$bookingRef|$amount|$currencyCode"
+            else -> listOf(
+                hotel.name.trim(),
+                hotel.checkIn.orEmpty(),
+                hotel.checkOut.orEmpty(),
+                amount.toString(),
+                currencyCode
+            ).joinToString("|")
+        }
+    }
+
+    private fun buildHotelExpenseTitle(hotels: List<com.wanderlog.android.domain.model.ParsedHotel>): String {
+        val representative = hotels.first()
+        return representative.name.trim().ifBlank { "Accommodation" }
+    }
+
     private fun parseImportedAmount(priceText: String?): Double? {
         return ImportedMoneyParser.parseAmount(priceText)
     }
@@ -435,6 +511,12 @@ class FileImportViewModel @Inject constructor(
         CURRENCY_CODE_REGEX.find(candidate)?.value?.let { return it }
 
         return when {
+            "A$" in candidate || "AU$" in candidate -> "AUD"
+            "S$" in candidate || "SG$" in candidate -> "SGD"
+            "US$" in candidate -> "USD"
+            "C$" in candidate || "CA$" in candidate -> "CAD"
+            "NZ$" in candidate -> "NZD"
+            "HK$" in candidate -> "HKD"
             "$" in candidate -> fallbackCurrencyCode
             "€" in candidate -> "EUR"
             "£" in candidate -> "GBP"
@@ -461,6 +543,14 @@ class FileImportViewModel @Inject constructor(
 private data class ImportedFlightExpenseCandidate(
     val flightIndex: Int,
     val flight: ParsedFlight,
+    val amount: Double,
+    val currencyCode: String,
+    val groupKey: String,
+    val expenseId: String
+)
+
+private data class ImportedHotelExpenseCandidate(
+    val hotel: com.wanderlog.android.domain.model.ParsedHotel,
     val amount: Double,
     val currencyCode: String,
     val groupKey: String,

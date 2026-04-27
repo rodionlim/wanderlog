@@ -5,18 +5,21 @@ import android.net.Uri
 import com.wanderlog.android.core.util.TravellerProfilesCodec
 import com.wanderlog.android.data.local.dao.AttachmentDao
 import com.wanderlog.android.data.local.dao.ExpenseDao
+import com.wanderlog.android.data.local.dao.ItineraryItemAttachmentLinkDao
 import com.wanderlog.android.data.local.dao.ItineraryItemDao
 import com.wanderlog.android.data.local.dao.PackingItemDao
 import com.wanderlog.android.data.local.dao.TripDao
 import com.wanderlog.android.data.local.dao.TripDayDao
 import com.wanderlog.android.data.local.entity.AttachmentEntity
 import com.wanderlog.android.data.local.entity.ExpenseEntity
+import com.wanderlog.android.data.local.entity.ItineraryItemAttachmentLinkEntity
 import com.wanderlog.android.data.local.entity.ItineraryItemEntity
 import com.wanderlog.android.data.local.entity.PackingItemEntity
 import com.wanderlog.android.data.local.entity.TripDayEntity
 import com.wanderlog.android.data.local.entity.TripEntity
 import com.wanderlog.android.domain.model.sync.SyncAttachmentPayload
 import com.wanderlog.android.domain.model.sync.SyncExpensePayload
+import com.wanderlog.android.domain.model.sync.SyncItemAttachmentLinkPayload
 import com.wanderlog.android.domain.model.sync.SyncItineraryItemPayload
 import com.wanderlog.android.domain.model.sync.SyncMetadata
 import com.wanderlog.android.domain.model.sync.SyncPackingItemPayload
@@ -34,6 +37,7 @@ class TripSyncBundleBuilder @Inject constructor(
     private val tripDao: TripDao,
     private val tripDayDao: TripDayDao,
     private val itineraryItemDao: ItineraryItemDao,
+    private val itineraryItemAttachmentLinkDao: ItineraryItemAttachmentLinkDao,
     private val expenseDao: ExpenseDao,
     private val packingItemDao: PackingItemDao,
     private val attachmentDao: AttachmentDao,
@@ -54,6 +58,8 @@ class TripSyncBundleBuilder @Inject constructor(
 
         val tripDays = tripDayDao.getDaysForTripForSync(tripId).map(TripDayEntity::toSyncPayload)
         val itineraryItems = itineraryItemDao.getItemsForTripForSync(tripId).map(ItineraryItemEntity::toSyncPayload)
+        val itemAttachmentLinks = itineraryItemAttachmentLinkDao.getLinksForTripForSync(tripId)
+            .map(ItineraryItemAttachmentLinkEntity::toSyncPayload)
         val expenses = expenseDao.getExpensesForTripForSync(tripId).map(ExpenseEntity::toSyncPayload)
         val packingItems = packingItemDao.getItemsForTripForSync(tripId).map(PackingItemEntity::toSyncPayload)
         val attachments = attachmentDao.getAttachmentsForTripForSync(tripId).map { it.toSyncPayload(context.filesDir) }
@@ -63,6 +69,7 @@ class TripSyncBundleBuilder @Inject constructor(
             trip = trip.toSyncPayload(context.filesDir),
             tripDays = tripDays,
             itineraryItems = itineraryItems,
+            itemAttachmentLinks = itemAttachmentLinks,
             expenses = expenses,
             packingItems = packingItems,
             attachments = attachments
@@ -125,6 +132,19 @@ private fun ItineraryItemEntity.toSyncPayload(): SyncItineraryItemPayload = Sync
     linkedExpenseId = linkedExpenseId,
     confirmationUrl = confirmationUrl,
     sortOrder = sortOrder,
+    metadata = SyncMetadata(
+        updatedAt = updatedAt,
+        deletedAt = deletedAt,
+        lastModifiedByDeviceId = lastModifiedByDeviceId
+    )
+)
+
+private fun ItineraryItemAttachmentLinkEntity.toSyncPayload(): SyncItemAttachmentLinkPayload = SyncItemAttachmentLinkPayload(
+    id = id,
+    tripId = tripId,
+    itineraryItemId = itineraryItemId,
+    attachmentId = attachmentId,
+    linkType = linkType,
     metadata = SyncMetadata(
         updatedAt = updatedAt,
         deletedAt = deletedAt,

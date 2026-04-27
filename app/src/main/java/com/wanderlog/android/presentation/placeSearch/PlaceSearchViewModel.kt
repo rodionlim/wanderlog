@@ -63,6 +63,12 @@ class PlaceSearchViewModel @Inject constructor(
         queryFlow.value = q
     }
 
+    fun initializeQuery(q: String?) {
+        val normalized = q?.trim().orEmpty()
+        _state.update { it.copy(query = normalized, selectedPlace = null) }
+        queryFlow.value = normalized
+    }
+
     fun selectPlace(place: Place) {
         viewModelScope.launch {
             val details = runCatching {

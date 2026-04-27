@@ -436,10 +436,11 @@ class AiRepositoryImpl @Inject constructor(
             Include arrival and departure terminals, flight type or cabin/fare class, and total price whenever they are visible.
             For the flight `price`, return the total amount across all passengers for that booking or segment, not a per-person amount.
             If the document lists separate fares, taxes, or passenger totals, sum them into one final total price string.
+                        For accommodation bookings, include the total accommodation price and any host phone number or host contact number when it is visible, especially for Airbnb-style stays.
             Output ONLY valid JSON with this schema:
             {
                             "flights": [{"flightNumber":null,"airline":null,"origin":"","destination":"","departureDateTime":null,"arrivalDateTime":null,"departureTerminal":null,"arrivalTerminal":null,"flightType":null,"price":null,"bookingRef":null}],
-              "hotels": [{"name":"","address":null,"checkIn":null,"checkOut":null,"bookingRef":null}],
+                            "hotels": [{"name":"","address":null,"checkIn":null,"checkOut":null,"bookingRef":null,"price":null,"hostPhone":null}],
               "activities": [{"title":"","location":null,"dateTime":null,"notes":null}]
             }
         """.trimIndent())
@@ -622,7 +623,20 @@ class AiRepositoryImpl @Inject constructor(
                     address = o.optString("address").takeIf { it.isNotBlank() },
                     checkIn = o.optString("checkIn").takeIf { it.isNotBlank() },
                     checkOut = o.optString("checkOut").takeIf { it.isNotBlank() },
-                    bookingRef = o.optString("bookingRef").takeIf { it.isNotBlank() }
+                    bookingRef = o.optString("bookingRef").takeIf { it.isNotBlank() },
+                    price = firstNonBlank(
+                        o.optString("price"),
+                        o.optString("totalPrice"),
+                        o.optString("total_price")
+                    ),
+                    hostPhone = firstNonBlank(
+                        o.optString("hostPhone"),
+                        o.optString("host_phone"),
+                        o.optString("hostPhoneNumber"),
+                        o.optString("host_phone_number"),
+                        o.optString("hostContactPhone"),
+                        o.optString("host_contact_phone")
+                    )
                 ))
             }
         }
@@ -642,4 +656,7 @@ class AiRepositoryImpl @Inject constructor(
 
         return ParsedBooking(flights, hotels, activities)
     }
+
+    private fun firstNonBlank(vararg values: String?): String? =
+        values.firstOrNull { !it.isNullOrBlank() }?.trim()
 }
