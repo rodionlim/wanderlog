@@ -6,6 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.wanderlog.android.presentation.ai.ask.AskTripScreen
 import com.wanderlog.android.presentation.ai.generate.AiGenerateScreen
 import com.wanderlog.android.presentation.attachments.AttachmentViewerScreen
 import com.wanderlog.android.presentation.attachments.AttachmentsScreen
@@ -58,6 +59,7 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
                 onOpenBudget = { navController.navigate(Screen.Budget.createRoute(tripId)) },
                 onOpenPacking = { navController.navigate(Screen.Packing.createRoute(tripId)) },
                 onOpenAiGenerate = { navController.navigate(Screen.AiGenerate.createRoute(tripId)) },
+                onOpenAskTrip = { navController.navigate(Screen.AskTrip.createRoute(tripId)) },
                 onOpenSync = { navController.navigate(Screen.TripSync.createRoute(tripId)) },
                 onOpenAttachments = { navController.navigate(Screen.Attachments.createRoute(tripId)) },
                 onOpenAttachment = { attachmentId ->
@@ -97,6 +99,13 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
             arguments = listOf(navArgument(Screen.AiGenerate.ARG_TRIP_ID) { type = NavType.StringType })
         ) {
             AiGenerateScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Screen.AskTrip.route,
+            arguments = listOf(navArgument(Screen.AskTrip.ARG_TRIP_ID) { type = NavType.StringType })
+        ) {
+            AskTripScreen(onBack = { navController.popBackStack() })
         }
 
         composable(

@@ -36,6 +36,11 @@ sealed class Screen(val route: String) {
         const val ARG_TRIP_ID = "tripId"
     }
 
+    data object AskTrip : Screen("ask_trip/{tripId}") {
+        fun createRoute(tripId: String) = "ask_trip/$tripId"
+        const val ARG_TRIP_ID = "tripId"
+    }
+
     data object TripSync : Screen("trip_sync?tripId={tripId}") {
         fun createRoute(tripId: String? = null) =
             if (tripId != null) "trip_sync?tripId=$tripId" else "trip_sync"

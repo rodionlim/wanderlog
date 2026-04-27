@@ -8,8 +8,10 @@ An offline-first Android travel planner. Plan trips, build day-by-day itinerarie
 - **Traveller-aware trip setup** — set the number of travellers and save a name or alias for each traveller when creating a trip
 - **Itinerary builder** — day-by-day items with drag-to-reorder and swipe-to-delete, plus optional activity costs linked back to Budget
 - **AI itinerary generation** — describe your trip and get a full itinerary, or let AI choose the best existing days to update
+- **Ask About Trip chat** — have a back-and-forth conversation about the current trip using trip details, itinerary, budget, and packing context, with optional multi-select attachments when you need extra source material
 - **Configurable AI models** — choose separate OpenAI models for itinerary generation and booking image/PDF parsing
 - **File import** — share booking emails or upload one or more PDFs/images/text files; PDFs default to text extraction with an optional rasterize-to-images mode, AI parses them into itinerary items, lets you review/edit extracted details, stores the source documents locally, links imported entries back to the upload, and can remove the related imported items, budget rows, and stored attachment together when you delete an imported entry
+- **Attachment-aware AI Q&A** — Ask About Trip keeps attachments off by default to save tokens, but you can selectively include one or more saved attachments for a question, and PDFs are sent as extracted text instead of rasterized pages
 - **Attachments vault** — attach markdown notes and files to any trip, with local storage and in-app preview for images, text, and PDFs
 - **Map view** — see all stops on a map with a connecting polyline
 - **Budget tracker** — log and categorise trip expenses, including auto-created transport expenses from imported flight totals and activity expenses linked from the itinerary

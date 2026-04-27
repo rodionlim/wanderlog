@@ -69,14 +69,19 @@ fun FileImportSheet(
     ) { uri: Uri? -> uri?.let { viewModel.parseUri(it, tripId, selectedHint) } }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Import Booking", style = MaterialTheme.typography.titleLarge)
 
         when (val s = step) {
             FileImportStep.Idle -> {
-                Text("What is this document? (optional — improves parsing)", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "What is this document? (optional — improves parsing)",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 HintChipsRow(
                     selected = selectedHint,
                     onSelect = { selectedHint = it }
@@ -109,14 +114,21 @@ fun FileImportSheet(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Import Multiple Files") }
-                OutlinedButton(onClick = { pdfLauncher.launch(arrayOf("application/pdf")) },
-                    modifier = Modifier.fillMaxWidth()) { Text("Import PDF") }
+                OutlinedButton(
+                    onClick = { pdfLauncher.launch(arrayOf("application/pdf")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Import PDF") }
                 OutlinedButton(onClick = {
-                    imageLauncher.launch(androidx.activity.result.PickVisualMediaRequest(
-                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    imageLauncher.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
                 }, modifier = Modifier.fillMaxWidth()) { Text("Import Image / Screenshot") }
-                OutlinedButton(onClick = { textLauncher.launch(arrayOf("text/plain", "text/csv")) },
-                    modifier = Modifier.fillMaxWidth()) { Text("Import Text / CSV") }
+                OutlinedButton(
+                    onClick = { textLauncher.launch(arrayOf("text/plain", "text/csv")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Import Text / CSV") }
                 Text(
                     "Use multiple files when one booking is split across PDFs, screenshots, or text exports.",
                     style = MaterialTheme.typography.bodySmall,
@@ -125,7 +137,10 @@ fun FileImportSheet(
             }
 
             FileImportStep.Parsing -> {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     CircularProgressIndicator()
                     Spacer(Modifier.height(8.dp))
                     Text("Parsing document with AI…")
@@ -145,7 +160,10 @@ fun FileImportSheet(
 
             is FileImportStep.Error -> {
                 Text("Error: ${s.message}", color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = viewModel::reset, modifier = Modifier.fillMaxWidth()) { Text("Try again") }
+                OutlinedButton(
+                    onClick = viewModel::reset,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Try again") }
             }
 
             FileImportStep.Done -> {}

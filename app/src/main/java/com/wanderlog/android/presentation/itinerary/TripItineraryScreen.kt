@@ -80,6 +80,7 @@ fun TripItineraryScreen(
     onOpenBudget: () -> Unit,
     onOpenPacking: () -> Unit,
     onOpenAiGenerate: () -> Unit,
+    onOpenAskTrip: () -> Unit,
     onOpenSync: () -> Unit,
     onOpenAttachments: () -> Unit,
     onOpenAttachment: (String) -> Unit,
@@ -139,6 +140,14 @@ fun TripItineraryScreen(
                                 onClick = {
                                     showOverflowMenu = false
                                     onOpenPacking()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Ask About Trip") },
+                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    onOpenAskTrip()
                                 }
                             )
                             DropdownMenuItem(

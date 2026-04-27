@@ -42,6 +42,21 @@ object FileUtils {
             }
         }
 
+    suspend fun readPdfText(context: Context, file: File, maxPages: Int = 10): String =
+        withContext(Dispatchers.IO) {
+            PDFBoxResourceLoader.init(context.applicationContext)
+            PDDocument.load(file).use { document ->
+                val lastPage = minOf(document.numberOfPages, maxPages)
+                if (lastPage <= 0) return@withContext ""
+
+                val stripper = PDFTextStripper().apply {
+                    startPage = 1
+                    endPage = lastPage
+                }
+                stripper.getText(document).trim()
+            }
+        }
+
     fun getMimeType(context: Context, uri: Uri): String? =
         context.contentResolver.getType(uri)
 
