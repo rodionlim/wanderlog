@@ -137,27 +137,41 @@ fun ItineraryItemCard(
                 }
                 if (item.itemType != ItineraryItemType.FLIGHT) {
                     item.place?.address?.let { addr ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 addr,
-                                modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
+                                maxLines = 2
                             )
                             onOpenInMaps?.let {
-                                TextButton(onClick = it) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .clickable(onClick = it)
+                                        .background(accent.copy(alpha = 0.10f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Map,
+                                        contentDescription = null,
+                                        tint = accent,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        "Open in Google Maps",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = accent,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                         contentDescription = null,
                                         tint = accent,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(12.dp)
                                     )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Maps", color = accent)
                                 }
                             }
                         }

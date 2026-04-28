@@ -533,6 +533,8 @@ private fun Place.toGoogleMapsUrl(): String? {
         .takeIf { it.size == 2 }
         ?.joinToString(",")
 
-    val query = coordinates ?: address?.takeIf { it.isNotBlank() } ?: name.takeIf { it.isNotBlank() }
+    val query = address?.takeIf { it.isNotBlank() }
+        ?: name.takeIf { it.isNotBlank() }
+        ?: coordinates
     return query?.let { "https://www.google.com/maps/search/?api=1&query=${Uri.encode(it)}" }
 }

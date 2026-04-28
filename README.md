@@ -1,5 +1,7 @@
 # Wanderlog
 
+[![Android CI](https://github.com/rodionlim/travel-log/actions/workflows/android.yml/badge.svg)](https://github.com/rodionlim/travel-log/actions/workflows/android.yml)
+
 An offline-first Android travel planner. Plan trips, build day-by-day itineraries, track expenses, manage packing lists, and import booking confirmations using AI.
 
 ## Features
