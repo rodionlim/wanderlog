@@ -74,9 +74,11 @@ import com.wanderlog.android.presentation.placeSearch.PlaceSearchSheet
 import coil.compose.AsyncImage
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import java.time.LocalTime
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -100,8 +102,8 @@ fun TripItineraryScreen(
     val items = remember(rawItems) {
         rawItems.sortedWith(
             compareBy<ItineraryItem>(
-                { it.startTime == null },
-                { parseItinerarySortDateTime(it.startTime) },
+                { parseItinerarySortTime(it.startTime) == null },
+                { parseItinerarySortTime(it.startTime) },
                 { it.sortOrder },
                 { it.title.lowercase() }
             )
@@ -519,13 +521,25 @@ fun TripItineraryScreen(
     }
 }
 
-private fun parseItinerarySortDateTime(value: String?): LocalDateTime? {
+private val itineraryTimeFormatters = listOf(
+    DateTimeFormatter.ofPattern("H:mm"),
+    DateTimeFormatter.ofPattern("HH:mm"),
+    DateTimeFormatter.ofPattern("h:mm a"),
+    DateTimeFormatter.ofPattern("h:mma"),
+    DateTimeFormatter.ofPattern("h a"),
+    DateTimeFormatter.ofPattern("ha")
+)
+
+private fun parseItinerarySortTime(value: String?): LocalTime? {
     val candidate = value?.trim().orEmpty()
     if (candidate.isBlank()) return null
 
-    return runCatching { OffsetDateTime.parse(candidate).toLocalDateTime() }.getOrNull()
-        ?: runCatching { ZonedDateTime.parse(candidate).toLocalDateTime() }.getOrNull()
-        ?: runCatching { LocalDateTime.parse(candidate) }.getOrNull()
+    return runCatching { OffsetDateTime.parse(candidate).toLocalTime() }.getOrNull()
+        ?: runCatching { ZonedDateTime.parse(candidate).toLocalTime() }.getOrNull()
+        ?: runCatching { LocalDateTime.parse(candidate).toLocalTime() }.getOrNull()
+        ?: itineraryTimeFormatters.firstNotNullOfOrNull { formatter ->
+            runCatching { LocalTime.parse(candidate.uppercase(), formatter) }.getOrNull()
+        }
 }
 
 private fun Place.toGoogleMapsUrl(): String? {

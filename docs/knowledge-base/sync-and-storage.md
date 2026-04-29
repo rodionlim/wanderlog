@@ -36,6 +36,6 @@ All foreign keys cascade delete. Date and time values are stored as ISO-8601 tex
 - Sync now includes item-attachment link payloads in addition to trips, days, itinerary items, expenses, packing items, and attachments.
 - Legacy `attachment://...` values are backfilled into `item_attachment_links` during database migration.
 
-## Related Deep Dive
+## Related References
 
-- See [Trip Sync](../TripSync.md) for the detailed sync protocol and merge behavior.
+- See [Trip Sync](./trip-sync.md) for the device-to-device sync flow, permissions, and merge behavior.

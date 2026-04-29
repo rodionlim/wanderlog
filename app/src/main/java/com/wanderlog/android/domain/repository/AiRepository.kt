@@ -5,6 +5,7 @@ import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.domain.model.Expense
 import com.wanderlog.android.domain.model.PackingItem
 import com.wanderlog.android.domain.model.ParsedBooking
+import com.wanderlog.android.domain.model.TravellerProfile
 import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripAssistantMessage
 import com.wanderlog.android.domain.model.TripDay
@@ -15,7 +16,7 @@ interface AiRepository {
         startDate: String,
         endDate: String,
         preferences: String,
-        travellers: Int,
+        travellerProfiles: List<TravellerProfile> = emptyList(),
         updatePrompt: String? = null,
         existingDays: List<TripDay> = emptyList()
     ): List<TripDay>

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -88,6 +89,13 @@ fun AskTripScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (state.estimatedContextTokens > 0 || state.estimatedInputTokens > 0) {
+                    Text(
+                        text = "Approx. prompt tokens: ${state.estimatedContextTokens} context • ${state.estimatedInputTokens} input • ${state.estimatedTotalTokens} total",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             HorizontalDivider()
@@ -135,6 +143,7 @@ fun AskTripScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .imePadding()
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {

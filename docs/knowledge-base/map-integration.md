@@ -21,8 +21,11 @@ The map feature is responsible for:
 
 - `MapScreen` renders a `GoogleMap` composable.
 - The initial camera centers on the first resolved itinerary item.
-- Markers are added for every item that has both latitude and longitude.
-- A polyline is drawn when two or more points are available.
+- Markers are grouped visually by trip day, with per-day colors and compact numbered legend chips.
+- Tapping a legend chip keeps that day emphasized and fades the other days instead of fully hiding them.
+- A polyline is drawn for each visible day when two or more points are available.
+- The camera fits the visible point bounds on load when multiple resolved stops exist.
+- While Places resolution is still running and no points are ready yet, the screen shows a centered resolving overlay instead of the empty-state message.
 
 ## Coordinate Resolution Strategy
 
@@ -37,14 +40,17 @@ Imported items do not need to arrive with coordinates already populated.
 
 This keeps imported trips usable on the map even when the parser only produced names or addresses.
 
-## Flight Filtering
+## Flight Map Placement
 
-Flights are handled differently from regular itinerary items:
+Flights are handled differently from regular itinerary items when choosing which endpoint should be shown on the trip map:
 
-- non-flight items are shown whenever they have coordinates
-- flight items are only plotted when their place text matches the trip destination closely enough
+- imported flight notes store explicit `Departure:` and `Arrival:` lines
+- map resolution can derive a preferred flight place from those notes even when an older saved place is stale
+- flights on non-final trip days prefer the arrival side
+- flights on the final trip day prefer the departure side
+- if a saved flight place does not match the preferred endpoint, the map flow re-resolves it before plotting
 
-This avoids cluttering the trip map with unrelated airports outside the trip’s destination context.
+This keeps arrival flights anchored to where the trip is headed while still showing the departure-side airport for the final trip day.
 
 ## Address-To-Maps Convenience Action
 
@@ -70,4 +76,4 @@ The map screen specifically depends on the manifest `MAPS_API_KEY` coming from `
 - [Project Overview](./project-overview.md)
 - [Architecture](./architecture.md)
 - [Development and Operations](./development-and-operations.md)
-- [Trip Sync](../TripSync.md)
+- [Trip Sync](./trip-sync.md)

@@ -25,7 +25,8 @@ Full-trip generation sends:
 - trip start date
 - trip end date
 - travel style / preferences
-- traveller count
+- saved traveller profiles from the trip
+- a traveller count inferred from those profiles
 
 The full-trip prompt asks the model to return a complete day-by-day itinerary as JSON.
 
@@ -45,7 +46,8 @@ It requires the user to describe what should change, and then the app sends:
 
 - destination
 - the user’s update request / preferences text
-- traveller count
+- saved traveller profiles from the trip
+- a traveller count inferred from those profiles
 - all existing trip days currently available
 - each existing day’s current itinerary items
 
@@ -95,7 +97,11 @@ So update mode adds onto the itinerary instead of replacing it.
 
 - The screen uses chips to switch between `Full trip` and `Update days`.
 - In `Update days`, the preferences field becomes a change-request prompt rather than a generic travel-style field.
+- Traveller context comes from the trip’s saved traveller profiles; there is no separate manual traveller-count field in AI Generate.
+- The screen shows an approximate prompt breakdown for context, input, and total tokens.
 - The preview clearly labels update mode as suggested additions across matched days.
+- Generated items can be accepted or rejected individually before commit.
+- Potential overlaps with existing itinerary items are detected in update mode and start unchecked by default.
 - The commit action label changes to `Add to Matching Days` in update mode.
 
 ## Practical Implication

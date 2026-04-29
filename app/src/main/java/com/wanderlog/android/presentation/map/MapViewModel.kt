@@ -5,8 +5,8 @@ import android.content.pm.PackageManager
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wanderlog.android.core.util.flightDetailLine
 import com.wanderlog.android.domain.model.ItineraryItem
-import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.repository.ItineraryRepository
 import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
@@ -18,12 +18,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
+data class MapDayMeta(
+    val tripDayId: String,
+    val dayNumber: Int,
+    val date: LocalDate
+)
+
+data class MapPointUi(
+    val item: ItineraryItem,
+    val dayNumber: Int? = null,
+    val dayDate: LocalDate? = null
+)
+
 data class MapUiState(
-    val items: List<ItineraryItem> = emptyList(),
+    val points: List<MapPointUi> = emptyList(),
     val selectedItemId: String? = null,
-    val mapError: String? = null
+    val mapError: String? = null,
+    val isResolving: Boolean = true
 )
 
 @HiltViewModel
@@ -41,59 +55,88 @@ class MapViewModel @Inject constructor(
     private val _state = MutableStateFlow(MapUiState())
     val state: StateFlow<MapUiState> = _state.asStateFlow()
     private val attemptedResolutionIds = mutableSetOf<String>()
+    private var dayMetadataById: Map<String, MapDayMeta> = emptyMap()
 
     init {
         _state.update { it.copy(mapError = resolveMapError(context)) }
         viewModelScope.launch {
-            val tripDestination = tripRepository.getTripById(tripId)?.destination.orEmpty()
+            tripRepository.getDaysForTripFlow(tripId).collect { days ->
+                dayMetadataById = days.associate { day ->
+                    day.id to MapDayMeta(
+                        tripDayId = day.id,
+                        dayNumber = day.dayNumber,
+                        date = day.date
+                    )
+                }
+                _state.update { current ->
+                    current.copy(points = current.points.map { point -> withDayMetadata(point.item) })
+                }
+            }
+        }
+        viewModelScope.launch {
             val flow = if (dayId != null)
                 itineraryRepository.getItemsForDay(dayId) // dayId specific
             else
                 itineraryRepository.getItemsForTrip(tripId)
 
             flow.collect { all ->
-                resolveMissingCoordinates(all)
                 val mappable = all.filter { item ->
+                    !needsFlightPlaceRefresh(item) &&
                     item.place?.latitude != null &&
-                        item.place.longitude != null &&
-                        shouldPlotOnMap(item, tripDestination)
+                        item.place.longitude != null
+                }.map(::withDayMetadata)
+                val pendingResolution = all.any { item ->
+                    shouldResolveForMap(item) && item.id !in attemptedResolutionIds
                 }
-                _state.update { it.copy(items = mappable) }
+
+                _state.update {
+                    it.copy(
+                        points = mappable,
+                        isResolving = pendingResolution
+                    )
+                }
+
+                val updatedAnyItems = resolveMissingCoordinates(all)
+                if (!updatedAnyItems) {
+                    _state.update { current -> current.copy(isResolving = false) }
+                }
             }
         }
     }
 
     fun selectItem(id: String?) = _state.update { it.copy(selectedItemId = id) }
 
-    private suspend fun resolveMissingCoordinates(items: List<ItineraryItem>) {
+    private fun withDayMetadata(item: ItineraryItem): MapPointUi {
+        val meta = dayMetadataById[item.tripDayId]
+        return MapPointUi(
+            item = item,
+            dayNumber = meta?.dayNumber,
+            dayDate = meta?.date
+        )
+    }
+
+    private suspend fun resolveMissingCoordinates(items: List<ItineraryItem>): Boolean {
+        var updatedAnyItems = false
         items
             .asSequence()
             .filterNot { it.id in attemptedResolutionIds }
-            .filter { it.place?.latitude == null || it.place.longitude == null }
-            .filter { it.place != null }
+            .filter(::shouldResolveForMap)
             .forEach { item ->
                 attemptedResolutionIds += item.id
 
                 val resolvedPlace = resolvePlace(item)
                 if (resolvedPlace?.latitude != null && resolvedPlace.longitude != null) {
                     itineraryRepository.updateItem(item.copy(place = resolvedPlace))
+                    updatedAnyItems = true
                 }
             }
+        return updatedAnyItems
     }
 
     private suspend fun resolvePlace(item: ItineraryItem) = runCatching {
-        val place = item.place ?: return@runCatching null
-        val queries = buildList {
-            place.address?.trim()?.takeIf { it.isNotBlank() }?.let { address ->
-                add(address)
-                place.name.trim().takeIf { it.isNotBlank() }?.let { name ->
-                    if (!address.contains(name, ignoreCase = true)) {
-                        add("$name $address")
-                    }
-                }
-            }
-            place.name.trim().takeIf { it.isNotBlank() }?.let(::add)
-        }.distinct()
+        val preferredPlace = item.preferredFlightPlaceCandidate()
+        val place = preferredPlace ?: item.place ?: return@runCatching null
+        val queries = buildPlaceQueries(item)
 
         for (query in queries) {
             val match = placesRepository.searchPlaces(query, null).firstOrNull() ?: continue
@@ -109,20 +152,73 @@ class MapViewModel @Inject constructor(
         null
     }.getOrNull()
 
-    private fun shouldPlotOnMap(item: ItineraryItem, tripDestination: String): Boolean {
-        if (item.itemType != ItineraryItemType.FLIGHT) {
-            return true
-        }
-        if (tripDestination.isBlank()) {
-            return true
-        }
+    private fun buildPlaceQueries(item: ItineraryItem): List<String> {
+        val place = item.preferredFlightPlaceCandidate() ?: item.place ?: return emptyList()
+        val title = item.title.trim().takeIf { it.isNotBlank() }
+        val name = place.name.trim().takeIf { it.isNotBlank() }
+        val address = place.address?.trim()?.takeIf { it.isNotBlank() }
 
-        val placeText = listOfNotNull(item.place?.name, item.place?.address)
+        return buildList {
+            if (title != null && name != null && !title.contains(name, ignoreCase = true)) {
+                add("$title $name")
+            }
+            if (name != null && address != null) {
+                add("$name $address")
+            }
+            if (title != null && address != null && !title.contains(address, ignoreCase = true)) {
+                add("$title $address")
+            }
+            title?.let(::add)
+            name?.let(::add)
+            address?.let(::add)
+        }.distinctBy { it.normalizeForComparison() }
+    }
+
+    private fun shouldResolveForMap(item: ItineraryItem): Boolean {
+        val place = item.place ?: return item.preferredFlightPlaceCandidate() != null
+        return place.latitude == null || place.longitude == null || needsFlightPlaceRefresh(item)
+    }
+
+    private fun needsFlightPlaceRefresh(item: ItineraryItem): Boolean {
+        val preferredPlace = item.preferredFlightPlaceCandidate() ?: return false
+        val savedPlace = item.place ?: return true
+        val preferredName = preferredPlace.name.normalizeForComparison()
+        if (preferredName.isBlank()) return false
+
+        val savedText = listOfNotNull(savedPlace.name, savedPlace.address)
             .joinToString(" ")
             .normalizeForComparison()
-        val destinationText = tripDestination.normalizeForComparison()
+        return !savedText.contains(preferredName)
+    }
 
-        return placeText.isNotBlank() && placeText.contains(destinationText)
+    private fun ItineraryItem.arrivalFlightPlaceCandidate() =
+        flightDetailLine("Arrival")
+            ?.substringBefore("(")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { arrivalName ->
+                place?.copy(name = arrivalName, address = null)
+                    ?: com.wanderlog.android.domain.model.Place(name = arrivalName)
+            }
+
+    private fun ItineraryItem.departureFlightPlaceCandidate() =
+        flightDetailLine("Departure")
+            ?.substringBefore("(")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { departureName ->
+                place?.copy(name = departureName, address = null)
+                    ?: com.wanderlog.android.domain.model.Place(name = departureName)
+            }
+
+    private fun ItineraryItem.preferredFlightPlaceCandidate() =
+        if (isOnFinalTripDay()) departureFlightPlaceCandidate() ?: arrivalFlightPlaceCandidate()
+        else arrivalFlightPlaceCandidate()
+
+    private fun ItineraryItem.isOnFinalTripDay(): Boolean {
+        val currentDay = dayMetadataById[tripDayId]?.dayNumber ?: return false
+        val finalDay = dayMetadataById.values.maxOfOrNull { it.dayNumber } ?: return false
+        return currentDay == finalDay
     }
 
     private fun String.normalizeForComparison(): String =

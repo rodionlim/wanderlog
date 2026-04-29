@@ -106,14 +106,14 @@ fun ItineraryItemFormSheet(
         OutlinedButton(
             onClick = {
                 onPlaceSearchRequested(
-                    state.place?.address
-                        ?: state.place?.name
+                    state.place?.name
+                        ?: state.place?.address
                         ?: state.title.takeIf { it.isNotBlank() }
                 )
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(state.place?.address ?: state.place?.name ?: "Search & add place")
+            Text(placeButtonLabel(state.place) ?: "Search & add place")
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -189,5 +189,17 @@ fun ItineraryItemFormSheet(
         }
 
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+private fun placeButtonLabel(place: Place?): String? {
+    val name = place?.name?.trim()?.takeIf { it.isNotBlank() }
+    val address = place?.address?.trim()?.takeIf { it.isNotBlank() }
+
+    return when {
+        name != null && address != null && !address.contains(name, ignoreCase = true) -> "$name - $address"
+        name != null -> name
+        address != null -> address
+        else -> null
     }
 }

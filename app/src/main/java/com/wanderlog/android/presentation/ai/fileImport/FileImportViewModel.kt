@@ -295,11 +295,10 @@ class FileImportViewModel @Inject constructor(
         if (inferredName.isBlank()) return null
 
         val queryCandidates = buildList {
-            if (!destination.isBlank()) {
+            if (destination.isNotBlank()) {
                 if (!destination.contains("airport", ignoreCase = true)) add("$destination airport")
                 add(destination)
-            }
-            if (origin.isNotBlank() && origin != destination) {
+            } else if (origin.isNotBlank()) {
                 if (!origin.contains("airport", ignoreCase = true)) add("$origin airport")
                 add(origin)
             }

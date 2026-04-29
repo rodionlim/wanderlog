@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -22,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -88,14 +90,14 @@ fun AiGenerateScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (state.estimatedContextTokens > 0) {
+                            Text(
+                                "Approx. prompt tokens: ${state.estimatedContextTokens} context • ${state.estimatedInputTokens} input • ${state.estimatedTotalTokens} total",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    OutlinedTextField(
-                        value = state.travellers,
-                        onValueChange = viewModel::onTravellersChange,
-                        label = { Text("Number of travellers") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
                     state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     Button(
                         onClick = viewModel::generate,
@@ -115,14 +117,31 @@ fun AiGenerateScreen(
 
             if (state.generatedDays.isNotEmpty()) {
                 item {
-                    Text(
-                        if (state.mode == AiGenerateMode.UPDATE_MULTIPLE_DAYS) {
-                            "Preview — suggested additions across ${state.generatedDays.size} day(s)"
-                        } else {
-                            "Preview — ${state.generatedDays.size} days generated"
-                        },
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            if (state.mode == AiGenerateMode.UPDATE_MULTIPLE_DAYS) {
+                                "Preview — suggested additions across ${state.generatedDays.size} day(s)"
+                            } else {
+                                "Preview — ${state.generatedDays.size} days generated"
+                            },
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        if (state.mode == AiGenerateMode.UPDATE_MULTIPLE_DAYS && state.overlappingGeneratedItemIds.isNotEmpty()) {
+                            Text(
+                                "Possible overlaps with existing itinerary items are unchecked by default.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = viewModel::selectAllGeneratedItems) {
+                                Text("Select all")
+                            }
+                            OutlinedButton(onClick = viewModel::clearGeneratedItemSelection) {
+                                Text("Clear")
+                            }
+                        }
+                    }
                 }
 
                 itemsIndexed(state.generatedDays) { _, day ->
@@ -133,8 +152,33 @@ fun AiGenerateScreen(
                             Spacer(Modifier.height(4.dp))
                             day.items.forEach { item ->
                                 val timePrefix = item.startTime?.let { "[$it] " } ?: ""
-                                Text("• $timePrefix${item.title}",
-                                    style = MaterialTheme.typography.bodyMedium)
+                                val isSelected = item.id in state.selectedGeneratedItemIds
+                                val isOverlap = item.id in state.overlappingGeneratedItemIds
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = { checked ->
+                                            viewModel.onGeneratedItemSelectionChanged(item.id, checked)
+                                        }
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "$timePrefix${item.title}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        if (isOverlap) {
+                                            Text(
+                                                "Possible overlap with an existing item on this day",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

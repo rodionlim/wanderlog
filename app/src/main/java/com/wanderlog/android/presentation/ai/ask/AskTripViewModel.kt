@@ -3,8 +3,11 @@ package com.wanderlog.android.presentation.ai.ask
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wanderlog.android.core.util.TripAssistantPromptSupport
+import com.wanderlog.android.data.remote.openai.dto.ContentPartDto
 import com.wanderlog.android.domain.model.Attachment
 import com.wanderlog.android.domain.model.Expense
+import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.PackingItem
 import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripAssistantMessage
@@ -24,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -34,6 +38,9 @@ data class AskTripUiState(
     val selectedAttachmentIds: Set<String> = emptySet(),
     val messages: List<TripAssistantMessage> = emptyList(),
     val draftQuestion: String = "",
+    val estimatedContextTokens: Int = 0,
+    val estimatedInputTokens: Int = 0,
+    val estimatedTotalTokens: Int = 0,
     val isLoading: Boolean = true,
     val isSending: Boolean = false,
     val error: String? = null
@@ -58,12 +65,17 @@ class AskTripViewModel @Inject constructor(
 
     private var trip: Trip? = null
     private var days: List<TripDay> = emptyList()
+    private var itineraryItems: List<ItineraryItem> = emptyList()
     private var expenses: List<Expense> = emptyList()
     private var packingItems: List<PackingItem> = emptyList()
+    private var cachedAttachmentSelection: Set<String> = emptySet()
+    private var cachedAttachmentParts: List<ContentPartDto> = emptyList()
+    private var estimateJob: Job? = null
 
     init {
         loadTrip()
         observeDays()
+        observeItineraryItems()
         observeExpenses()
         observePackingItems()
         observeAttachments()
@@ -71,6 +83,7 @@ class AskTripViewModel @Inject constructor(
 
     fun onQuestionChange(value: String) {
         _state.update { it.copy(draftQuestion = value, error = null) }
+        refreshPromptEstimates()
     }
 
     fun toggleAttachmentSelection(attachmentId: String) {
@@ -81,6 +94,7 @@ class AskTripViewModel @Inject constructor(
             }
             current.copy(selectedAttachmentIds = selected, error = null)
         }
+        refreshPromptEstimates()
     }
 
     fun clearError() {
@@ -109,10 +123,8 @@ class AskTripViewModel @Inject constructor(
             _state.update { it.copy(isSending = true, error = null) }
 
             runCatching {
-                val itineraryDays = days.sortedBy { it.dayNumber }.map { day ->
-                    day.copy(items = itineraryRepository.getItemsForDay(day.id).first())
-                }
-                val attachmentParts = buildAttachmentContextParts(selectedAttachments)
+                val itineraryDays = currentPromptDays()
+                val attachmentParts = attachmentPartsForSelection(selectedAttachments)
                 askAboutTrip(
                     trip = currentTrip,
                     days = itineraryDays,
@@ -156,6 +168,7 @@ class AskTripViewModel @Inject constructor(
                     error = if (loadedTrip == null) "Trip not found" else it.error
                 )
             }
+            refreshPromptEstimates()
         }
     }
 
@@ -163,6 +176,16 @@ class AskTripViewModel @Inject constructor(
         viewModelScope.launch {
             tripRepository.getDaysForTripFlow(tripId).collect { tripDays ->
                 days = tripDays
+                refreshPromptEstimates()
+            }
+        }
+    }
+
+    private fun observeItineraryItems() {
+        viewModelScope.launch {
+            itineraryRepository.getItemsForTrip(tripId).collect { items ->
+                itineraryItems = items
+                refreshPromptEstimates()
             }
         }
     }
@@ -171,6 +194,7 @@ class AskTripViewModel @Inject constructor(
         viewModelScope.launch {
             getExpenses(tripId).collect { tripExpenses ->
                 expenses = tripExpenses
+                refreshPromptEstimates()
             }
         }
     }
@@ -179,6 +203,7 @@ class AskTripViewModel @Inject constructor(
         viewModelScope.launch {
             getPackingItems(tripId).collect { items ->
                 packingItems = items
+                refreshPromptEstimates()
             }
         }
     }
@@ -195,7 +220,75 @@ class AskTripViewModel @Inject constructor(
                         }
                     )
                 }
+                refreshPromptEstimates()
             }
         }
+    }
+
+    private fun refreshPromptEstimates() {
+        val currentTrip = trip ?: run {
+            _state.update {
+                it.copy(
+                    estimatedContextTokens = 0,
+                    estimatedInputTokens = 0,
+                    estimatedTotalTokens = 0
+                )
+            }
+            return
+        }
+
+        val stateSnapshot = _state.value
+        val selectedAttachments = stateSnapshot.attachments.filter { attachment ->
+            attachment.id in stateSnapshot.selectedAttachmentIds
+        }
+        val question = stateSnapshot.draftQuestion.trim()
+        val conversation = stateSnapshot.messages
+
+        estimateJob?.cancel()
+        estimateJob = viewModelScope.launch {
+            val attachmentParts = attachmentPartsForSelection(selectedAttachments)
+            val estimate = TripAssistantPromptSupport.estimatePrompt(
+                trip = currentTrip,
+                days = currentPromptDays(),
+                expenses = expenses,
+                packingItems = packingItems,
+                conversation = conversation,
+                question = question,
+                attachmentParts = attachmentParts,
+                selectedAttachmentNames = selectedAttachments.map(Attachment::displayName)
+            )
+            _state.update {
+                it.copy(
+                    estimatedContextTokens = estimate.contextTokens,
+                    estimatedInputTokens = estimate.inputTokens,
+                    estimatedTotalTokens = estimate.totalTokens
+                )
+            }
+        }
+    }
+
+    private fun currentPromptDays(): List<TripDay> {
+        val itemsByDay = itineraryItems.groupBy(ItineraryItem::tripDayId)
+        return days
+            .sortedBy { it.dayNumber }
+            .map { day ->
+                day.copy(items = itemsByDay[day.id].orEmpty().sortedBy(ItineraryItem::sortOrder))
+            }
+    }
+
+    private suspend fun attachmentPartsForSelection(selectedAttachments: List<Attachment>): List<ContentPartDto> {
+        val selectedIds = selectedAttachments.mapTo(linkedSetOf(), Attachment::id)
+        if (selectedIds == cachedAttachmentSelection) {
+            return cachedAttachmentParts
+        }
+
+        val parts = if (selectedAttachments.isEmpty()) {
+            emptyList()
+        } else {
+            buildAttachmentContextParts(selectedAttachments)
+        }
+        cachedAttachmentSelection = selectedIds
+        cachedAttachmentParts = parts
+        return parts
     }
 }

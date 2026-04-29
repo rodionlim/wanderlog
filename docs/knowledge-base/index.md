@@ -11,6 +11,7 @@ This knowledge base is a project-local reference for the current Wanderlog codeb
 - [Map Integration](./map-integration.md) — map screen behavior, coordinate resolution, Google Maps launching, and Maps key requirements.
 - [Settings and Onboarding](./settings-and-onboarding.md) — runtime settings, API key help, and first-run AI onboarding.
 - [Sync and Storage](./sync-and-storage.md) — Room schema, attachment-link model, and sync-specific storage rules.
+- [Trip Sync](./trip-sync.md) — Nearby device-to-device sync flow, payload contents, permissions, and conflict behavior.
 - [Development and Operations](./development-and-operations.md) — environment setup, build/test commands, CI, and release flow.
 - [Maintenance Rules](./maintenance-rules.md) — how to keep this knowledge base small, useful, and easy to query.
 
@@ -23,7 +24,6 @@ This knowledge base is a project-local reference for the current Wanderlog codeb
 
 - [README](../../README.md) — public project overview and setup instructions.
 - [CLAUDE](../../CLAUDE.md) — repository working notes and implementation-facing guidance.
-- [Trip Sync](../TripSync.md) — sync protocol and behavior details.
 - [Releasing](../RELEASING.md) — release process and signing guidance.
 
 ## How To Use This Folder

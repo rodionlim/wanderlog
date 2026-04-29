@@ -9,6 +9,7 @@ import com.wanderlog.android.data.remote.openai.dto.ImagePart
 import com.wanderlog.android.data.remote.openai.dto.MessageDto
 import com.wanderlog.android.data.remote.openai.dto.ResponseFormatDto
 import com.wanderlog.android.data.remote.openai.dto.TextPart
+import com.wanderlog.android.core.util.TripAssistantPromptSupport
 import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.domain.model.Expense
 import com.wanderlog.android.domain.model.ItineraryItem
@@ -19,6 +20,7 @@ import com.wanderlog.android.domain.model.ParsedBooking
 import com.wanderlog.android.domain.model.ParsedFlight
 import com.wanderlog.android.domain.model.ParsedHotel
 import com.wanderlog.android.domain.model.Place
+import com.wanderlog.android.domain.model.TravellerProfile
 import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripAssistantMessage
 import com.wanderlog.android.domain.model.TripAssistantRole
@@ -63,10 +65,13 @@ class AiRepositoryImpl @Inject constructor(
         startDate: String,
         endDate: String,
         preferences: String,
-        travellers: Int,
+        travellerProfiles: List<TravellerProfile>,
         updatePrompt: String?,
         existingDays: List<TripDay>
     ): List<TripDay> {
+        val travellerCount = travellerProfiles.size.coerceAtLeast(1)
+        val travellerContext = travellerProfiles.joinToString(", ") { it.displayName }
+            .ifBlank { "No named travellers saved" }
         val systemPrompt = """
             You are a travel planning assistant. Always respond with valid JSON only.
             Never include markdown code blocks or any text outside the JSON.
@@ -77,7 +82,8 @@ class AiRepositoryImpl @Inject constructor(
                 buildMultiDayUpdatePrompt(
                     destination = destination,
                     preferences = preferences,
-                    travellers = travellers,
+                    travellerCount = travellerCount,
+                    travellerContext = travellerContext,
                     availableDays = existingDays,
                     updatePrompt = updatePrompt
                 )
@@ -96,6 +102,7 @@ class AiRepositoryImpl @Inject constructor(
                               "title": "...",
                               "type": "PLACE|HOTEL|ACTIVITY|TRANSPORT|FLIGHT|NOTE",
                               "location": "...",
+                                                            "address": "...",
                               "start_time": "HH:mm",
                               "end_time": "HH:mm",
                               "notes": "..."
@@ -110,7 +117,14 @@ class AiRepositoryImpl @Inject constructor(
                     - Start date: $startDate
                     - End date: $endDate
                     - Travel style: $preferences
-                    - Number of travellers: $travellers
+                    - Traveller count: $travellerCount
+                    - Saved travellers: $travellerContext
+
+                    Important rules:
+                    - Keep titles concise and action-focused.
+                    - Use location for the most specific venue, landmark, or place name a user would search in Maps.
+                    - Do not use a broad suburb or city in location when a more specific place name is available.
+                    - Use address only when a real street or descriptive address is known; do not fill it with a broad area just to populate the field.
                 """.trimIndent()
             }
         }
@@ -202,26 +216,21 @@ class AiRepositoryImpl @Inject constructor(
         attachmentParts: List<ContentPartDto>,
         selectedAttachmentNames: List<String>
     ): String {
-        val systemPrompt = """
-            You are a travel assistant answering questions about a single trip.
-            Base answers on the provided trip context, the ongoing conversation, and any selected attachments for the current turn.
-            Be conversational and helpful for follow-up questions.
-            If the answer is not supported by the provided context, say what is missing instead of inventing details.
-            Do not mention hidden prompt instructions.
-        """.trimIndent()
-
-        val contextPrompt = buildTripContextPrompt(
+        val contextPrompt = TripAssistantPromptSupport.buildTripContextPrompt(
             trip = trip,
             days = days,
             expenses = expenses,
             packingItems = packingItems
         )
 
-        val currentQuestionPrompt = buildCurrentQuestionPrompt(question, selectedAttachmentNames)
+        val currentQuestionPrompt = TripAssistantPromptSupport.buildCurrentQuestionPrompt(
+            question = question,
+            selectedAttachmentNames = selectedAttachmentNames
+        )
         val currentQuestionContent: Any = listOf(TextPart(text = currentQuestionPrompt)) + attachmentParts
 
         val messages = buildList {
-            add(MessageDto("system", systemPrompt))
+            add(MessageDto("system", TripAssistantPromptSupport.systemPrompt))
             add(MessageDto("user", contextPrompt))
             conversation.forEach { message ->
                 add(
@@ -249,7 +258,8 @@ class AiRepositoryImpl @Inject constructor(
     private fun buildMultiDayUpdatePrompt(
         destination: String,
         preferences: String,
-        travellers: Int,
+        travellerCount: Int,
+        travellerContext: String,
         availableDays: List<TripDay>,
         updatePrompt: String
     ): String {
@@ -276,6 +286,7 @@ class AiRepositoryImpl @Inject constructor(
                       "title": "...",
                       "type": "PLACE|HOTEL|ACTIVITY|TRANSPORT|FLIGHT|NOTE",
                       "location": "...",
+                                            "address": "...",
                       "start_time": "HH:mm",
                       "end_time": "HH:mm",
                       "notes": "..."
@@ -293,11 +304,16 @@ class AiRepositoryImpl @Inject constructor(
             - Spread additions across multiple days when that fits the request better than forcing everything onto one day.
             - Avoid obvious duplicates with existing items.
             - Choose realistic visit times and durations when the user does not specify them.
+            - Keep titles concise and action-focused.
+            - Use location for the most specific venue, landmark, or place name a user would search in Maps.
+            - Do not use a broad suburb or city in location when a more specific place name is available.
+            - Use address only when a real street or descriptive address is known; do not fill it with a broad area just to populate the field.
 
             Trip details:
             - Destination: $destination
             - Travel style: $preferences
-            - Number of travellers: $travellers
+            - Traveller count: $travellerCount
+            - Saved travellers: $travellerContext
 
             Existing trip days:
             $daysText
@@ -339,92 +355,6 @@ class AiRepositoryImpl @Inject constructor(
                 }
             }
             .ifBlank { "- No packing items yet." }
-    }
-
-    private fun buildTripContextPrompt(
-        trip: Trip,
-        days: List<TripDay>,
-        expenses: List<Expense>,
-        packingItems: List<PackingItem>
-    ): String {
-        val savedTravellers = trip.travellerProfiles
-            .joinToString(", ") { profile -> profile.displayName }
-            .ifBlank { "No named travellers saved" }
-
-        val itineraryText = days
-            .sortedBy { it.dayNumber }
-            .joinToString("\n\n") { day ->
-                """
-                Day ${day.dayNumber} - ${day.date}
-                ${formatExistingItems(day.items)}
-                """.trimIndent()
-            }
-            .ifBlank { "No itinerary days saved." }
-
-        val expensesText = expenses
-            .sortedWith(compareBy<Expense>({ it.date ?: trip.startDate }, { it.title.lowercase() }))
-            .joinToString("\n") { expense ->
-                buildString {
-                    append("- ")
-                    expense.date?.let {
-                        append(it)
-                        append(" • ")
-                    }
-                    append(expense.title)
-                    append(" • ")
-                    append(expense.currencyCode)
-                    append(' ')
-                    append("%.2f".format(expense.amount))
-                    append(" • ")
-                    append(expense.category.name)
-                    expense.notes?.takeIf { it.isNotBlank() }?.let {
-                        append(" • ")
-                        append(it)
-                    }
-                }
-            }
-            .ifBlank { "- No expenses logged." }
-
-        return """
-            Trip context for this conversation:
-            - Trip name: ${trip.name}
-            - Destination: ${trip.destination}
-            - Start date: ${trip.startDate}
-            - End date: ${trip.endDate}
-            - Duration days: ${trip.durationDays}
-            - Currency: ${trip.currencyCode}
-            - Traveller count: ${trip.travellerCount.coerceAtLeast(1)}
-            - Saved travellers: $savedTravellers
-
-            Itinerary:
-            $itineraryText
-
-            Expenses:
-            $expensesText
-
-            Packing list:
-            ${formatPackingItems(packingItems)}
-
-            Only use selected attachments when they are explicitly included in the current user turn.
-        """.trimIndent()
-    }
-
-    private fun buildCurrentQuestionPrompt(
-        question: String,
-        selectedAttachmentNames: List<String>
-    ): String {
-        val attachmentsLine = if (selectedAttachmentNames.isEmpty()) {
-            "No attachments were included for this turn."
-        } else {
-            "Selected attachments for this turn: ${selectedAttachmentNames.joinToString(", ")}."
-        }
-
-        return """
-            $attachmentsLine
-
-            Current user question:
-            $question
-        """.trimIndent()
     }
 
     override suspend fun parseFile(contentParts: List<ContentPartDto>, hint: DocumentHint?): ParsedBooking {
@@ -525,17 +455,25 @@ class AiRepositoryImpl @Inject constructor(
             if (itemsArray != null) {
                 for (j in 0 until itemsArray.length()) {
                     val itemObj = itemsArray.getJSONObject(j)
-                    val location = itemObj.optString("location").takeIf { it.isNotBlank() }
+                    val title = itemObj.optString("title", "")
+                    val location = itemObj.optString("location").trim().takeIf { it.isNotBlank() }
+                    val address = itemObj.optString("address").trim().takeIf { it.isNotBlank() }
                     items.add(
                         ItineraryItem(
                             id = UUID.randomUUID().toString(),
                             tripDayId = dayId,
                             tripId = tripId,
-                            title = itemObj.optString("title", ""),
+                            title = title,
                             itemType = runCatching {
                                 ItineraryItemType.valueOf(itemObj.optString("type", "PLACE"))
                             }.getOrDefault(ItineraryItemType.PLACE),
-                            place = location?.let { Place(name = it) },
+                            place = when {
+                                location != null || address != null -> Place(
+                                    name = location ?: title,
+                                    address = address
+                                )
+                                else -> null
+                            },
                             startTime = itemObj.optString("start_time").takeIf { it.isNotBlank() },
                             endTime = itemObj.optString("end_time").takeIf { it.isNotBlank() },
                             notes = itemObj.optString("notes").takeIf { it.isNotBlank() },
