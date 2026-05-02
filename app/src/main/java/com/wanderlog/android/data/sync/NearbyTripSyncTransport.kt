@@ -225,27 +225,41 @@ class NearbyTripSyncTransport @Inject constructor(
         }
     }
 
-    private suspend fun handleReceivedManifest(endpointId: String, manifest: TripSyncManifest) {
+    private suspend fun handleReceivedManifest(
+        endpointId: String,
+        manifest: TripSyncManifest,
+        controlTripId: String
+    ) {
+        val remoteTripId = controlTripId.normalizedSyncTripId()
+            ?: (manifest.tripId as Any?).normalizedSyncTripId()
+            ?: throw IllegalStateException("Received sync manifest without a valid trip ID")
+
         val tripId = state.value.tripId
-        if (tripId != null && tripId != manifest.tripId) {
-            appendLog("Ignored manifest for ${manifest.tripId}")
+        if (tripId != null && tripId != remoteTripId) {
+            appendLog("Ignored manifest for $remoteTripId")
             return
+        }
+
+        val normalizedManifest = if ((manifest.tripId as Any?).normalizedSyncTripId() == remoteTripId) {
+            manifest
+        } else {
+            manifest.copy(tripId = remoteTripId)
         }
 
         if (tripId == null) {
             _state.update {
                 it.copy(
-                    tripId = manifest.tripId,
-                    statusMessage = "Connected to remote trip ${manifest.tripId}"
+                    tripId = remoteTripId,
+                    statusMessage = "Connected to remote trip $remoteTripId"
                 )
             }
         }
 
-        val localManifest = coordinator.buildLocalManifest(manifest.tripId)
-        val plan = coordinator.compareWithRemoteManifestOrEmpty(manifest)
-        val remoteTripRecord = manifest.records.firstOrNull { record ->
+        val localManifest = coordinator.buildLocalManifest(remoteTripId)
+        val plan = coordinator.compareWithRemoteManifestOrEmpty(normalizedManifest)
+        val remoteTripRecord = normalizedManifest.records.firstOrNull { record ->
             record.entityType == com.wanderlog.android.domain.model.sync.SyncEntityType.TRIP &&
-                record.id == manifest.tripId
+                record.id == remoteTripId
         }
         val summary = buildString {
             append("Manifest compared")
@@ -260,14 +274,14 @@ class NearbyTripSyncTransport @Inject constructor(
         appendLog(summary)
 
         if (remoteTripRecord?.deletedAt != null) {
-            appendLog("Remote trip ${manifest.tripId} is deleted; sync will remove the local copy if that tombstone wins")
+            appendLog("Remote trip $remoteTripId is deleted; sync will remove the local copy if that tombstone wins")
         }
 
         if (plan.recordsToPush.isNotEmpty()) {
-            sendLocalBundle(endpointId, manifest.tripId)
+            sendLocalBundle(endpointId, remoteTripId)
         } else if (localManifest == null && plan.recordsToPull.isNotEmpty()) {
-            sendLocalManifest(endpointId, manifest.tripId, allowEmptyLocal = true)
-            appendLog("Requested bundle for ${manifest.tripId}")
+            sendLocalManifest(endpointId, remoteTripId, allowEmptyLocal = true)
+            appendLog("Requested bundle for $remoteTripId")
         } else if (plan.recordsToPull.isEmpty()) {
             appendLog("Trips are already in sync")
         }
@@ -454,7 +468,11 @@ class NearbyTripSyncTransport @Inject constructor(
                         runCatching {
                             val message = controlAdapter.fromJson(bytes.decodeToString())
                             if (message?.type == CONTROL_TYPE_MANIFEST && message.manifest != null) {
-                                handleReceivedManifest(endpointId, message.manifest)
+                                handleReceivedManifest(
+                                    endpointId = endpointId,
+                                    manifest = message.manifest,
+                                    controlTripId = message.tripId
+                                )
                             }
                         }.onFailure { error ->
                             reportError("Unable to handle control payload", error)
@@ -508,3 +526,6 @@ class NearbyTripSyncTransport @Inject constructor(
         val STRATEGY: Strategy = Strategy.P2P_POINT_TO_POINT
     }
 }
+
+private fun Any?.normalizedSyncTripId(): String? =
+    (this as? String)?.trim()?.takeIf { it.isNotBlank() }

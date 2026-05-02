@@ -20,10 +20,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DropdownMenu
@@ -158,6 +158,9 @@ fun TripItineraryScreen(
                     IconButton(onClick = onOpenBudget) {
                         Icon(Icons.Default.AttachMoney, contentDescription = "Budget")
                     }
+                    IconButton(onClick = onOpenPacking) {
+                        Icon(Icons.Default.Checklist, contentDescription = "Packing list")
+                    }
                     Box {
                         IconButton(onClick = { showOverflowMenu = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More actions")
@@ -166,14 +169,6 @@ fun TripItineraryScreen(
                             expanded = showOverflowMenu,
                             onDismissRequest = { showOverflowMenu = false }
                         ) {
-                            DropdownMenuItem(
-                                text = { Text("Packing") },
-                                leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null) },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    onOpenPacking()
-                                }
-                            )
                             DropdownMenuItem(
                                 text = { Text("Ask About Trip") },
                                 leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },

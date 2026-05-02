@@ -107,6 +107,40 @@ class PackingViewModel @Inject constructor(
             }
             .sortedBy { aggregate -> aggregate.items.minOfOrNull(PackingItem::sortOrder) ?: 0 }
 
+    fun reorderVisibleItems(reorderedVisibleItems: List<PackingItem>) {
+        if (reorderedVisibleItems.size < 2) return
+
+        val currentItems = _state.value.items
+        val visibleIds = reorderedVisibleItems.map(PackingItem::id).toSet()
+        val visibleSortOrders = currentItems
+            .filter { it.id in visibleIds }
+            .sortedBy(PackingItem::sortOrder)
+            .map(PackingItem::sortOrder)
+
+        persistReorderedItems(
+            reorderedVisibleItems.mapIndexedNotNull { index, item ->
+                val newSortOrder = visibleSortOrders.getOrNull(index) ?: index
+                item.takeUnless { it.sortOrder == newSortOrder }?.copy(sortOrder = newSortOrder)
+            }
+        )
+    }
+
+    fun reorderAggregateItems(reorderedGroups: List<PackingAggregateItem>) {
+        if (reorderedGroups.size < 2) return
+
+        val currentItems = _state.value.items.sortedBy(PackingItem::sortOrder)
+        val reorderedItems = reorderedGroups.flatMap { group -> group.items.sortedBy(PackingItem::sortOrder) }
+        if (currentItems.size != reorderedItems.size) return
+
+        val sortOrders = currentItems.map(PackingItem::sortOrder)
+        persistReorderedItems(
+            reorderedItems.mapIndexedNotNull { index, item ->
+                val newSortOrder = sortOrders.getOrNull(index) ?: index
+                item.takeUnless { it.sortOrder == newSortOrder }?.copy(sortOrder = newSortOrder)
+            }
+        )
+    }
+
     fun addItem() {
         val current = _state.value
         val text = current.newItemText.trim()
@@ -231,6 +265,16 @@ class PackingViewModel @Inject constructor(
                         quantity = quantity
                     )
                 )
+            }
+        }
+    }
+
+    private fun persistReorderedItems(items: List<PackingItem>) {
+        if (items.isEmpty()) return
+
+        viewModelScope.launch {
+            items.forEach { item ->
+                updateItem.invoke(item)
             }
         }
     }

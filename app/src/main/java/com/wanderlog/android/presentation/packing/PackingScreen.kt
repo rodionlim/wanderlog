@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -42,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.wanderlog.android.core.ui.component.WanderTopBar
 import com.wanderlog.android.domain.model.PackingItem
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 @Composable
 fun PackingScreen(
@@ -50,13 +54,47 @@ fun PackingScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val showAggregateTab = state.travellerNames.isNotEmpty()
+    val showingAggregateItems = showAggregateTab && state.selectedTabIndex == 0
     val aggregateItems = viewModel.aggregateItems()
     val visibleIndividualItems = viewModel.visibleIndividualItems()
+    var localAggregateItems by remember(aggregateItems) { mutableStateOf(aggregateItems) }
+    var localVisibleIndividualItems by remember(visibleIndividualItems) { mutableStateOf(visibleIndividualItems) }
+    var hasPendingReorder by remember(showingAggregateItems, state.selectedTabIndex) { mutableStateOf(false) }
+    val headerItemCount = 2 + if (showAggregateTab) 1 else 0
     var editingItem by remember { mutableStateOf<PackingItem?>(null) }
     var editingAggregateItem by remember { mutableStateOf<PackingAggregateItem?>(null) }
+    val lazyListState = rememberLazyListState()
+    val commitReorder = {
+        if (!hasPendingReorder) {
+            Unit
+        } else if (showingAggregateItems) {
+            viewModel.reorderAggregateItems(localAggregateItems)
+            hasPendingReorder = false
+        } else {
+            viewModel.reorderVisibleItems(localVisibleIndividualItems)
+            hasPendingReorder = false
+        }
+    }
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val sourceIndex = from.index - headerItemCount
+        val targetIndex = to.index - headerItemCount
+
+        if (showingAggregateItems) {
+            reorderItems(localAggregateItems, sourceIndex, targetIndex)?.let { reorderedItems ->
+                localAggregateItems = reorderedItems
+                hasPendingReorder = true
+            }
+        } else {
+            reorderItems(localVisibleIndividualItems, sourceIndex, targetIndex)?.let { reorderedItems ->
+                localVisibleIndividualItems = reorderedItems
+                hasPendingReorder = true
+            }
+        }
+    }
 
     Scaffold(topBar = { WanderTopBar(title = "Packing List", onBack = onBack) }) { padding ->
         LazyColumn(
+            state = lazyListState,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -149,69 +187,85 @@ fun PackingScreen(
                 }
             }
 
-            if (showAggregateTab && state.selectedTabIndex == 0) {
-                items(aggregateItems, key = { it.key }) { group ->
-                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = group.allChecked,
-                                onCheckedChange = { viewModel.toggleAggregateItem(group) }
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = group.title,
-                                    textDecoration = if (group.allChecked) TextDecoration.LineThrough else null
+            if (showingAggregateItems) {
+                items(localAggregateItems, key = { it.key }) { group ->
+                    ReorderableItem(reorderableState, key = group.key) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = group.allChecked,
+                                    onCheckedChange = { viewModel.toggleAggregateItem(group) }
                                 )
-                                Text(
-                                    text = "Qty ${group.totalQuantity} • ${group.checkedCount}/${group.totalCount} packed${group.travellerLabel.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = group.title,
+                                        textDecoration = if (group.allChecked) TextDecoration.LineThrough else null
+                                    )
+                                    Text(
+                                        text = "Qty ${group.totalQuantity} • ${group.checkedCount}/${group.totalCount} packed${group.travellerLabel.takeIf { it.isNotBlank() }?.let { " • $it" } ?: ""}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(onClick = { editingAggregateItem = group }) {
+                                    Icon(Icons.Default.Edit, "Edit")
+                                }
+                                IconButton(onClick = { viewModel.deleteAggregateItem(group) }) {
+                                    Icon(Icons.Default.Delete, "Delete")
+                                }
+                                Icon(
+                                    Icons.Default.DragHandle,
+                                    contentDescription = "Reorder",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.draggableHandle(onDragStopped = { commitReorder() })
                                 )
-                            }
-                            IconButton(onClick = { editingAggregateItem = group }) {
-                                Icon(Icons.Default.Edit, "Edit")
-                            }
-                            IconButton(onClick = { viewModel.deleteAggregateItem(group) }) {
-                                Icon(Icons.Default.Delete, "Delete")
                             }
                         }
                     }
                 }
             } else {
-                items(visibleIndividualItems, key = { it.id }) { item ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = item.isChecked,
-                            onCheckedChange = { viewModel.toggleItem(item) }
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = item.title,
-                                textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
+                items(localVisibleIndividualItems, key = { it.id }) { item ->
+                    ReorderableItem(reorderableState, key = item.id) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = item.isChecked,
+                                onCheckedChange = { viewModel.toggleItem(item) }
                             )
-                            Text(
-                                text = buildString {
-                                    append("Qty ${item.quantity}")
-                                    item.travellerName?.let { travellerName ->
-                                        append(" • ")
-                                        append(travellerName)
-                                    }
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.title,
+                                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else null
+                                )
+                                Text(
+                                    text = buildString {
+                                        append("Qty ${item.quantity}")
+                                        item.travellerName?.let { travellerName ->
+                                            append(" • ")
+                                            append(travellerName)
+                                        }
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { editingItem = item }) {
+                                Icon(Icons.Default.Edit, "Edit")
+                            }
+                            IconButton(onClick = { viewModel.deleteItem(item) }) {
+                                Icon(Icons.Default.Delete, "Delete")
+                            }
+                            Icon(
+                                Icons.Default.DragHandle,
+                                contentDescription = "Reorder",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.draggableHandle(onDragStopped = { commitReorder() })
                             )
-                        }
-                        IconButton(onClick = { editingItem = item }) {
-                            Icon(Icons.Default.Edit, "Edit")
-                        }
-                        IconButton(onClick = { viewModel.deleteItem(item) }) {
-                            Icon(Icons.Default.Delete, "Delete")
                         }
                     }
                 }
@@ -246,6 +300,17 @@ fun PackingScreen(
             }
         )
     }
+}
+
+private fun <T> reorderItems(items: List<T>, sourceIndex: Int, targetIndex: Int): List<T>? {
+    if (sourceIndex == targetIndex) return null
+    if (sourceIndex !in items.indices) return null
+
+    val mutable = items.toMutableList()
+    val movedItem = mutable.removeAt(sourceIndex)
+    val insertionIndex = targetIndex.coerceIn(0, mutable.size)
+    mutable.add(insertionIndex, movedItem)
+    return mutable
 }
 
 @Composable
