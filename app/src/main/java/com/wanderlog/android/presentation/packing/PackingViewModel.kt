@@ -10,6 +10,7 @@ import com.wanderlog.android.domain.usecase.packing.AddPackingItemUseCase
 import com.wanderlog.android.domain.usecase.packing.DeletePackingItemUseCase
 import com.wanderlog.android.domain.usecase.packing.GetPackingItemsUseCase
 import com.wanderlog.android.domain.usecase.packing.TogglePackingItemUseCase
+import com.wanderlog.android.domain.usecase.packing.UpdatePackingItemUseCase
 import com.wanderlog.android.domain.usecase.packing.UpdatePackingListWithAiUseCase
 import com.wanderlog.android.presentation.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -53,6 +54,7 @@ class PackingViewModel @Inject constructor(
     private val addItem: AddPackingItemUseCase,
     private val toggleItem: TogglePackingItemUseCase,
     private val deleteItem: DeletePackingItemUseCase,
+    private val updateItem: UpdatePackingItemUseCase,
     private val updatePackingListWithAi: UpdatePackingListWithAiUseCase
 ) : ViewModel() {
 
@@ -200,6 +202,36 @@ class PackingViewModel @Inject constructor(
     fun deleteAggregateItem(group: PackingAggregateItem) {
         viewModelScope.launch {
             group.items.forEach { item -> deleteItem.invoke(item) }
+        }
+    }
+
+    fun updateItem(item: PackingItem, title: String, quantity: Int) {
+        val normalizedTitle = title.trim()
+        if (normalizedTitle.isBlank() || quantity <= 0) return
+
+        viewModelScope.launch {
+            updateItem.invoke(
+                item.copy(
+                    title = normalizedTitle,
+                    quantity = quantity
+                )
+            )
+        }
+    }
+
+    fun updateAggregateItem(group: PackingAggregateItem, title: String, quantity: Int) {
+        val normalizedTitle = title.trim()
+        if (normalizedTitle.isBlank() || quantity <= 0) return
+
+        viewModelScope.launch {
+            group.items.forEach { item ->
+                updateItem.invoke(
+                    item.copy(
+                        title = normalizedTitle,
+                        quantity = quantity
+                    )
+                )
+            }
         }
     }
 
