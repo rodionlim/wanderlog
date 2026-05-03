@@ -17,6 +17,8 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import org.json.JSONArray
+import org.json.JSONObject
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
 import com.wanderlog.android.BuildConfig
@@ -466,7 +468,7 @@ class NearbyTripSyncTransport @Inject constructor(
                     val bytes = payload.asBytes() ?: return
                     scope.launch {
                         runCatching {
-                            val message = controlAdapter.fromJson(bytes.decodeToString())
+                            val message = controlAdapter.fromJson(bytes.decodeToString().sanitizeIncomingControlPayload())
                             if (message?.type == CONTROL_TYPE_MANIFEST && message.manifest != null) {
                                 handleReceivedManifest(
                                     endpointId = endpointId,
@@ -529,3 +531,12 @@ class NearbyTripSyncTransport @Inject constructor(
 
 private fun Any?.normalizedSyncTripId(): String? =
     (this as? String)?.trim()?.takeIf { it.isNotBlank() }
+
+private fun String.sanitizeIncomingControlPayload(): String = runCatching {
+    val root = JSONObject(this)
+    val manifest = root.optJSONObject("manifest") ?: return this
+    if (!manifest.has("records") || manifest.isNull("records")) {
+        manifest.put("records", JSONArray())
+    }
+    root.toString()
+}.getOrDefault(this)
