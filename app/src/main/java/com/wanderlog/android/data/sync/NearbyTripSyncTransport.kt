@@ -82,6 +82,7 @@ class NearbyTripSyncTransport @Inject constructor(
     private val connectionsClient: ConnectionsClient = Nearby.getConnectionsClient(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val controlAdapter = moshi.adapter(NearbySyncControlMessage::class.java)
+    private val manifestAdapter = moshi.adapter(TripSyncManifest::class.java)
     private val bundleAdapter = moshi.adapter(TripSyncBundle::class.java)
     private val discoveredPeers = linkedMapOf<String, NearbySyncPeer>()
     private val knownEndpointNames = mutableMapOf<String, String>()
@@ -468,7 +469,7 @@ class NearbyTripSyncTransport @Inject constructor(
                     val bytes = payload.asBytes() ?: return
                     scope.launch {
                         runCatching {
-                            val message = controlAdapter.fromJson(bytes.decodeToString().sanitizeIncomingControlPayload())
+                            val message = parseIncomingControlMessage(bytes.decodeToString())
                             if (message?.type == CONTROL_TYPE_MANIFEST && message.manifest != null) {
                                 handleReceivedManifest(
                                     endpointId = endpointId,
@@ -521,6 +522,26 @@ class NearbyTripSyncTransport @Inject constructor(
         else -> status.statusMessage ?: "status ${status.statusCode}"
     }
 
+    private fun parseIncomingControlMessage(payload: String): NearbySyncControlMessage? =
+        runCatching {
+            val root = JSONObject(payload)
+            val type = root.optString("type").trim().takeIf { it.isNotBlank() } ?: return null
+            val controlTripId = root.opt("tripId").normalizedSyncTripId()
+            val manifestJson = root.optJSONObject("manifest")
+            val manifest = manifestJson?.let { json ->
+                val normalizedManifestJson = json.normalizeIncomingManifestJson(controlTripId)
+                manifestAdapter.fromJson(normalizedManifestJson.toString())
+            }
+
+            NearbySyncControlMessage(
+                type = type,
+                tripId = controlTripId
+                    ?: manifest?.tripId
+                    ?: "",
+                manifest = manifest
+            )
+        }.getOrNull()
+
     private companion object {
         const val MAX_LOG_LINES = 20
         const val CONTROL_TYPE_MANIFEST = "manifest"
@@ -532,11 +553,18 @@ class NearbyTripSyncTransport @Inject constructor(
 private fun Any?.normalizedSyncTripId(): String? =
     (this as? String)?.trim()?.takeIf { it.isNotBlank() }
 
-private fun String.sanitizeIncomingControlPayload(): String = runCatching {
-    val root = JSONObject(this)
-    val manifest = root.optJSONObject("manifest") ?: return this
-    if (!manifest.has("records") || manifest.isNull("records")) {
-        manifest.put("records", JSONArray())
+private fun JSONObject.normalizeIncomingManifestJson(controlTripId: String?): JSONObject = JSONObject(toString()).apply {
+    val normalizedTripId = opt("tripId").normalizedSyncTripId() ?: controlTripId
+    if (normalizedTripId != null) {
+        put("tripId", normalizedTripId)
     }
-    root.toString()
-}.getOrDefault(this)
+    if (!has("protocolVersion") || isNull("protocolVersion")) {
+        put("protocolVersion", TripSyncManifest.CURRENT_PROTOCOL_VERSION)
+    }
+    if (!has("generatedAt") || isNull("generatedAt")) {
+        put("generatedAt", 0L)
+    }
+    if (!has("records") || isNull("records")) {
+        put("records", JSONArray())
+    }
+}

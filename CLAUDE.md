@@ -121,3 +121,4 @@ Settings (from TripList top-bar)
 - If the requested task appears to already be done, ask the user whether they consider the task completed and whether the related TODO should be removed or updated.
 - Keep the local knowledge base under `docs/knowledge-base/` split by topic instead of growing one large file.
 - Maintain `docs/knowledge-base/NOTES.md` as a dated chronological log of notable feature work, workflow changes, and documentation milestones.
+- Nearby trip sync has a receiver-side compatibility gotcha: older or mismatched builds can send malformed control manifests with missing or null fields such as `tripId` or `records`. When touching `NearbyTripSyncTransport`, keep the incoming control payload parsing tolerant and normalize nested manifest defaults before deserializing with Moshi, otherwise sync can fail with `Unable to handle control payload` before merge logic runs.
