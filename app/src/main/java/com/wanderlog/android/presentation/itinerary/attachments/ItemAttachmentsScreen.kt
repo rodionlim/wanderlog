@@ -199,6 +199,13 @@ private fun ItemAttachmentRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                attachment.tags.takeIf { it.isNotEmpty() }?.let { tags ->
+                    Text(
+                        text = tags.joinToString("  ") { tag -> "#$tag" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             if (onRemove != null) {
                 IconButton(onClick = onRemove) {

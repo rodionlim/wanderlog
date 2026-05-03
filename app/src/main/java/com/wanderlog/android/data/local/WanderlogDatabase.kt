@@ -31,7 +31,7 @@ import com.wanderlog.android.data.local.entity.TripEntity
         PackingItemEntity::class,
         AttachmentEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(RoomConverters::class)
@@ -217,6 +217,14 @@ abstract class WanderlogDatabase : RoomDatabase() {
                 )
                 database.execSQL(
                     "UPDATE itinerary_items SET confirmation_url = NULL WHERE confirmation_url LIKE 'attachment://%'"
+                )
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE attachments ADD COLUMN tags TEXT NOT NULL DEFAULT ''"
                 )
             }
         }

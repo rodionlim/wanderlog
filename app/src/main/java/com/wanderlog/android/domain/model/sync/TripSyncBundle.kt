@@ -121,6 +121,7 @@ data class SyncAttachmentPayload(
     val mimeType: String,
     val localPath: String,
     val label: String? = null,
+    val tags: List<String> = emptyList(),
     val sizeBytes: Long,
     val createdAt: Long,
     val contentHash: String? = null,

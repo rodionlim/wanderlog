@@ -84,9 +84,10 @@ class ItineraryItemAttachmentRepositoryImpl @Inject constructor(
         itemId: String,
         uri: Uri,
         label: String?,
+        tags: List<String>,
         linkType: ItemAttachmentLinkType
     ): Attachment {
-        val attachment = attachmentRepository.importFromUri(tripId, uri, label)
+        val attachment = attachmentRepository.importFromUri(tripId, uri, label, tags)
         addAttachmentToItem(tripId, itemId, attachment.id, linkType)
         return attachment
     }

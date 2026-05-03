@@ -17,6 +17,7 @@ import com.wanderlog.android.data.local.entity.ItineraryItemEntity
 import com.wanderlog.android.data.local.entity.PackingItemEntity
 import com.wanderlog.android.data.local.entity.TripDayEntity
 import com.wanderlog.android.data.local.entity.TripEntity
+import com.wanderlog.android.domain.model.toAttachmentTags
 import com.wanderlog.android.domain.model.sync.SyncAttachmentPayload
 import com.wanderlog.android.domain.model.sync.SyncExpensePayload
 import com.wanderlog.android.domain.model.sync.SyncItemAttachmentLinkPayload
@@ -201,6 +202,7 @@ private fun AttachmentEntity.toSyncPayload(filesDir: File): SyncAttachmentPayloa
         mimeType = mimeType,
         localPath = localPath,
         label = label,
+        tags = tags.toAttachmentTags(),
         sizeBytes = sizeBytes,
         createdAt = createdAt,
         contentHash = contentHash,

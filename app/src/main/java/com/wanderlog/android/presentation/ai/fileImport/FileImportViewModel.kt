@@ -14,6 +14,7 @@ import com.wanderlog.android.domain.model.ParsedFlight
 import com.wanderlog.android.domain.model.Place
 import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TripDay
+import com.wanderlog.android.domain.model.normalizeAttachmentTags
 import com.wanderlog.android.domain.repository.AttachmentRepository
 import com.wanderlog.android.domain.repository.ItineraryRepository
 import com.wanderlog.android.domain.repository.ItineraryItemAttachmentRepository
@@ -127,13 +128,14 @@ class FileImportViewModel @Inject constructor(
             runCatching {
                 val review = _step.value as? FileImportStep.Review
                 val trip = tripRepository.getTripById(tripId)
+                val importedAttachmentTags = review?.parsedBooking?.toAttachmentTags().orEmpty()
                 val importedAttachments = pendingSourceUris.mapIndexed { index, uri ->
                     val label = if (pendingSourceUris.size == 1) {
                         "Imported booking"
                     } else {
                         "Imported booking ${index + 1}"
                     }
-                    attachmentRepository.importFromUri(tripId, uri, label)
+                    attachmentRepository.importFromUri(tripId, uri, label, importedAttachmentTags)
                 }
                 itineraryRepository.insertItems(items)
                 importedAttachments.forEach { attachment ->
@@ -710,3 +712,11 @@ private data class ImportedActivityExpenseCandidate(
 )
 
 private fun Int?.orZero(): Int = this ?: 0
+
+private fun ParsedBooking.toAttachmentTags(): List<String> = normalizeAttachmentTags(
+    buildList {
+        if (flights.isNotEmpty()) add("flight")
+        if (hotels.isNotEmpty()) add("hotel")
+        if (activities.isNotEmpty()) add("activity")
+    }
+)

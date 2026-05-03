@@ -8,7 +8,8 @@ import java.io.File
 interface AttachmentRepository {
     fun getAttachmentsForTrip(tripId: String): Flow<List<Attachment>>
     suspend fun getById(id: String): Attachment?
-    suspend fun importFromUri(tripId: String, uri: Uri, label: String?): Attachment
+    suspend fun importFromUri(tripId: String, uri: Uri, label: String?, tags: List<String> = emptyList()): Attachment
+    suspend fun update(attachment: Attachment)
     suspend fun delete(attachment: Attachment)
     suspend fun readText(attachment: Attachment): String
     fun getFile(attachment: Attachment): File

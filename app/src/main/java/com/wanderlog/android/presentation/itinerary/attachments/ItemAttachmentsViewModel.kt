@@ -5,8 +5,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wanderlog.android.domain.model.Attachment
+import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.model.ItemAttachmentLinkType
 import com.wanderlog.android.domain.model.ItineraryItemAttachment
+import com.wanderlog.android.domain.model.defaultAttachmentTags
 import com.wanderlog.android.domain.repository.AttachmentRepository
 import com.wanderlog.android.domain.repository.ItineraryItemAttachmentRepository
 import com.wanderlog.android.domain.repository.ItineraryRepository
@@ -45,10 +47,12 @@ class ItemAttachmentsViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ItemAttachmentsUiState())
     val state: StateFlow<ItemAttachmentsUiState> = _state.asStateFlow()
+    private var itemType: ItineraryItemType? = null
 
     init {
         viewModelScope.launch {
             val item = itineraryRepository.getItemsForTrip(tripId).first().firstOrNull { it.id == itemId }
+            itemType = item?.itemType
             _state.update { current -> current.copy(itemTitle = item?.title ?: "Attachments") }
         }
     }
@@ -62,6 +66,7 @@ class ItemAttachmentsViewModel @Inject constructor(
                     itemId = itemId,
                     uri = uri,
                     label = state.value.itemTitle,
+                    tags = itemType?.defaultAttachmentTags().orEmpty(),
                     linkType = ItemAttachmentLinkType.MANUAL
                 )
             }.onSuccess {

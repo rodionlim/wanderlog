@@ -79,7 +79,7 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
                 onOpenAskTrip = { navController.navigate(Screen.AskTrip.createRoute(tripId)) },
                 onOpenItemAttachments = { itemId -> navController.navigate(Screen.ItemAttachments.createRoute(tripId, itemId)) },
                 onOpenSync = { navController.navigate(Screen.TripSync.createRoute(tripId)) },
-                onOpenAttachments = { navController.navigate(Screen.Attachments.createRoute(tripId)) },
+                onOpenAttachments = { pickOnOpen -> navController.navigate(Screen.Attachments.createRoute(tripId, pickOnOpen)) },
             )
         }
 
@@ -138,11 +138,18 @@ fun WanderlogNavGraph(startAtShare: Boolean = false) {
 
         composable(
             route = Screen.Attachments.route,
-            arguments = listOf(navArgument(Screen.Attachments.ARG_TRIP_ID) { type = NavType.StringType })
-        ) {
+            arguments = listOf(
+                navArgument(Screen.Attachments.ARG_TRIP_ID) { type = NavType.StringType },
+                navArgument(Screen.Attachments.ARG_PICK_ON_OPEN) {
+                    type = NavType.BoolType
+                    defaultValue = false
+                }
+            )
+        ) { backStackEntry ->
             AttachmentsScreen(
                 onBack = { navController.popBackStack() },
-                onOpenAttachment = { id -> navController.navigate(Screen.AttachmentViewer.createRoute(id)) }
+                onOpenAttachment = { id -> navController.navigate(Screen.AttachmentViewer.createRoute(id)) },
+                pickOnOpen = backStackEntry.arguments?.getBoolean(Screen.Attachments.ARG_PICK_ON_OPEN) == true
             )
         }
 

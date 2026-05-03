@@ -93,7 +93,7 @@ fun TripItineraryScreen(
     onOpenAskTrip: () -> Unit,
     onOpenItemAttachments: (String) -> Unit,
     onOpenSync: () -> Unit,
-    onOpenAttachments: () -> Unit,
+    onOpenAttachments: (Boolean) -> Unit,
     viewModel: TripItineraryViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -198,7 +198,7 @@ fun TripItineraryScreen(
                                 leadingIcon = { Icon(Icons.Default.FolderOpen, contentDescription = null) },
                                 onClick = {
                                     showOverflowMenu = false
-                                    onOpenAttachments()
+                                    onOpenAttachments(false)
                                 }
                             )
                         }
@@ -436,6 +436,15 @@ fun TripItineraryScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Manual Entry")
+                }
+                OutlinedButton(
+                    onClick = {
+                        showAddOptions = false
+                        onOpenAttachments(true)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Upload attachment")
                 }
                 Spacer(Modifier.height(16.dp))
             }

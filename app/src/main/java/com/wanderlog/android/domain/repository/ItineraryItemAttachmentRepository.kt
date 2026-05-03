@@ -31,6 +31,7 @@ interface ItineraryItemAttachmentRepository {
         itemId: String,
         uri: Uri,
         label: String? = null,
+        tags: List<String> = emptyList(),
         linkType: ItemAttachmentLinkType = ItemAttachmentLinkType.MANUAL
     ): Attachment
 

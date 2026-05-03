@@ -3,11 +3,13 @@ package com.wanderlog.android.data.repository
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.wanderlog.android.data.local.dao.AttachmentDao
 import com.wanderlog.android.data.local.dao.ItineraryItemAttachmentLinkDao
 import com.wanderlog.android.data.local.entity.AttachmentEntity
 import com.wanderlog.android.data.sync.SyncMetadataStamp
 import com.wanderlog.android.domain.model.Attachment
+import com.wanderlog.android.domain.model.normalizeAttachmentTags
 import com.wanderlog.android.domain.repository.AttachmentRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -31,11 +33,11 @@ class AttachmentRepositoryImpl @Inject constructor(
     override suspend fun getById(id: String): Attachment? =
         dao.getById(id)?.toDomain()
 
-    override suspend fun importFromUri(tripId: String, uri: Uri, label: String?): Attachment =
+    override suspend fun importFromUri(tripId: String, uri: Uri, label: String?, tags: List<String>): Attachment =
         withContext(Dispatchers.IO) {
             val resolver = context.contentResolver
             val mimeType = resolver.getType(uri) ?: "application/octet-stream"
-            val displayName = queryDisplayName(uri) ?: defaultNameFor(mimeType)
+            val displayName = resolveDisplayName(uri, mimeType)
 
             val dir = File(context.filesDir, "attachments/$tripId").apply { mkdirs() }
             val id = UUID.randomUUID().toString()
@@ -56,6 +58,7 @@ class AttachmentRepositoryImpl @Inject constructor(
                 mimeType = mimeType,
                 localPath = relativePath,
                 label = label,
+                tags = normalizeAttachmentTags(tags),
                 sizeBytes = target.length(),
                 createdAt = now
             )
@@ -68,6 +71,20 @@ class AttachmentRepositoryImpl @Inject constructor(
             )
             attachment
         }
+
+    override suspend fun update(attachment: Attachment) = withContext(Dispatchers.IO) {
+        val existing = dao.getByIdIncludingDeleted(attachment.id) ?: return@withContext
+        val now = syncMetadataStamp.now()
+        val deviceId = syncMetadataStamp.currentDeviceId()
+        dao.update(
+            AttachmentEntity.fromDomain(
+                attachment = attachment.copy(tags = normalizeAttachmentTags(attachment.tags)),
+                updatedAt = now,
+                deletedAt = existing.deletedAt,
+                lastModifiedByDeviceId = deviceId
+            )
+        )
+    }
 
     override suspend fun delete(attachment: Attachment) = withContext(Dispatchers.IO) {
         val now = syncMetadataStamp.now()
@@ -92,6 +109,25 @@ class AttachmentRepositoryImpl @Inject constructor(
     override fun getFile(attachment: Attachment): File =
         File(context.filesDir, attachment.localPath)
 
+    private fun resolveDisplayName(uri: Uri, mimeType: String): String {
+        val providerName = queryDisplayName(uri)?.cleanDisplayName()
+        val pathCandidate = uri.lastPathSegment
+            ?.let(Uri::decode)
+            ?.substringAfterLast('/')
+            ?.substringAfterLast(':')
+            ?.cleanDisplayName()
+
+        val preferredName = when {
+            providerName.isUsefulImportedName() -> providerName
+            pathCandidate.isUsefulImportedName() -> pathCandidate
+            providerName != null -> providerName
+            pathCandidate != null -> pathCandidate
+            else -> defaultNameFor(mimeType)
+        } ?: defaultNameFor(mimeType)
+
+        return preferredName.withInferredExtension(mimeType)
+    }
+
     private fun queryDisplayName(uri: Uri): String? {
         val cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?: return null
@@ -112,4 +148,37 @@ class AttachmentRepositoryImpl @Inject constructor(
         mimeType.startsWith("image/") -> "image"
         else -> "attachment"
     }
+}
+
+private fun String.cleanDisplayName(): String? =
+    trim()
+        .takeIf { it.isNotBlank() }
+        ?.replace(Regex("[\\r\\n]+"), " ")
+
+private fun String?.isUsefulImportedName(): Boolean {
+    val value = this ?: return false
+    val normalized = value.lowercase()
+    if (normalized in setOf("download", "downloads", "document", "attachment", "file")) {
+        return false
+    }
+    if (normalized.matches(Regex("[0-9]+"))) {
+        return false
+    }
+    return true
+}
+
+private fun String.withInferredExtension(mimeType: String): String {
+    if (contains('.')) {
+        return this
+    }
+
+    val extension = when {
+        mimeType == "text/markdown" -> "md"
+        mimeType == "application/pdf" -> "pdf"
+        mimeType == "image/jpeg" -> "jpg"
+        mimeType == "image/png" -> "png"
+        else -> MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+    } ?: return this
+
+    return "$this.$extension"
 }

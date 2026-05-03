@@ -6,6 +6,8 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.wanderlog.android.domain.model.Attachment
+import com.wanderlog.android.domain.model.toAttachmentTags
+import com.wanderlog.android.domain.model.toStoredAttachmentTags
 
 @Entity(
     tableName = "attachments",
@@ -24,6 +26,7 @@ data class AttachmentEntity(
     @ColumnInfo(name = "mime_type") val mimeType: String,
     @ColumnInfo(name = "local_path") val localPath: String,
     val label: String? = null,
+    val tags: String = "",
     @ColumnInfo(name = "size_bytes") val sizeBytes: Long,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at") val updatedAt: Long = createdAt,
@@ -37,6 +40,7 @@ data class AttachmentEntity(
         mimeType = mimeType,
         localPath = localPath,
         label = label,
+        tags = tags.toAttachmentTags(),
         sizeBytes = sizeBytes,
         createdAt = createdAt
     )
@@ -54,6 +58,7 @@ data class AttachmentEntity(
             mimeType = attachment.mimeType,
             localPath = attachment.localPath,
             label = attachment.label,
+            tags = attachment.tags.toStoredAttachmentTags(),
             sizeBytes = attachment.sizeBytes,
             createdAt = attachment.createdAt,
             updatedAt = updatedAt,

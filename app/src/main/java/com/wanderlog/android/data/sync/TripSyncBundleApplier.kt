@@ -18,6 +18,7 @@ import com.wanderlog.android.data.local.entity.ItineraryItemEntity
 import com.wanderlog.android.data.local.entity.PackingItemEntity
 import com.wanderlog.android.data.local.entity.TripDayEntity
 import com.wanderlog.android.data.local.entity.TripEntity
+import com.wanderlog.android.domain.model.toStoredAttachmentTags
 import com.wanderlog.android.domain.model.sync.SyncAttachmentPayload
 import com.wanderlog.android.domain.model.sync.SyncExpensePayload
 import com.wanderlog.android.domain.model.sync.SyncItemAttachmentLinkPayload
@@ -172,7 +173,12 @@ class TripSyncBundleApplier @Inject constructor(
             targetFile.writeBytes(decoded)
         }
 
-        attachmentDao.insert(payload.toEntity())
+        val entity = payload.toEntity()
+        if (localEntity == null) {
+            attachmentDao.insert(entity)
+        } else {
+            attachmentDao.update(entity)
+        }
         return true
     }
 }
@@ -323,6 +329,7 @@ private fun SyncAttachmentPayload.toEntity(): AttachmentEntity = AttachmentEntit
     mimeType = mimeType,
     localPath = localPath,
     label = label,
+    tags = tags.toStoredAttachmentTags(),
     sizeBytes = sizeBytes,
     createdAt = createdAt,
     updatedAt = metadata.updatedAt,

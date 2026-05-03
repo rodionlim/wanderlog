@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.wanderlog.android.data.local.entity.AttachmentEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -49,8 +50,11 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE id = :id")
     suspend fun getByIdIncludingDeleted(id: String): AttachmentEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(attachment: AttachmentEntity)
+
+    @Update
+    suspend fun update(attachment: AttachmentEntity)
 
     @Query("DELETE FROM attachments WHERE deleted_at IS NOT NULL")
     suspend fun purgeDeletedAttachments()

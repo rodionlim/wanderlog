@@ -51,9 +51,10 @@ sealed class Screen(val route: String) {
 
     data object ShareImport : Screen("share_import")
 
-    data object Attachments : Screen("attachments/{tripId}") {
-        fun createRoute(tripId: String) = "attachments/$tripId"
+    data object Attachments : Screen("attachments/{tripId}?pickOnOpen={pickOnOpen}") {
+        fun createRoute(tripId: String, pickOnOpen: Boolean = false) = "attachments/$tripId?pickOnOpen=$pickOnOpen"
         const val ARG_TRIP_ID = "tripId"
+        const val ARG_PICK_ON_OPEN = "pickOnOpen"
     }
 
     data object AttachmentViewer : Screen("attachment_viewer/{attachmentId}") {
