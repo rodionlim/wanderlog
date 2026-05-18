@@ -7,6 +7,7 @@ import com.wanderlog.android.domain.model.PackingItem
 import com.wanderlog.android.domain.repository.PackingRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 import javax.inject.Inject
 
 class PackingRepositoryImpl @Inject constructor(
@@ -27,6 +28,33 @@ class PackingRepositoryImpl @Inject constructor(
                 updatedAt = now,
                 lastModifiedByDeviceId = deviceId
             )
+        )
+    }
+
+    override suspend fun copyItemsFromTrip(
+        sourceTripId: String,
+        targetTripId: String,
+        travellerNameMap: Map<String, String?>
+    ) {
+        val sourceItems = dao.getItemsForTripOnce(sourceTripId)
+        if (sourceItems.isEmpty()) return
+
+        val now = syncMetadataStamp.now()
+        val deviceId = syncMetadataStamp.currentDeviceId()
+        dao.insertItems(
+            sourceItems.map { item ->
+                PackingItemEntity.fromDomain(
+                    item = item.toDomain().copy(
+                        id = UUID.randomUUID().toString(),
+                        tripId = targetTripId,
+                        isChecked = false,
+                        travellerName = item.travellerName?.let { travellerNameMap[it] ?: it }
+                    ),
+                    createdAt = now,
+                    updatedAt = now,
+                    lastModifiedByDeviceId = deviceId
+                )
+            }
         )
     }
 

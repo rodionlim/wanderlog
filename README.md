@@ -18,7 +18,7 @@ An offline-first Android travel planner. Plan trips, build day-by-day itinerarie
 - **Trip notes and global reminders** — add notes inside any trip, mark selected reminders to appear on the home screen, and keep those trip-linked global notes synced across devices
 - **Map view** — see all stops on a map with a connecting polyline, including best-effort coordinate resolution for imported places that were saved without map data
 - **Budget tracker** — log and categorise trip expenses with optional manual dates, a day-by-day grouped view, an `Unscheduled` bucket, primary day and secondary category filters, auto-created transport/accommodation/activity expenses from imports, and a separate display currency with approximate offline FX conversion
-- **Packing list** — per-trip checklist with aggregated and per-traveller tabs, plus AI-powered whole-list updates using trip context and a natural-language prompt
+- **Packing list** — per-trip checklist with aggregated and per-traveller tabs, the option to copy a packing list from an existing trip when creating a new trip, plus AI-powered whole-list updates using trip context and a natural-language prompt
 - **Google Places integration** — search and pin locations when adding itinerary items, and fetch trip cover photos automatically
 - **Offline-first sync** — all data is stored locally in a Room database, with a nearby device sync layer that now includes trip-linked global notes alongside the rest of each trip's data
 

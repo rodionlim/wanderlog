@@ -110,6 +110,15 @@ fun TripFormScreen(
             )
             Spacer(Modifier.height(12.dp))
 
+            if (state.tripId == null && state.availablePackingSourceTrips.isNotEmpty()) {
+                CopyPackingFromField(
+                    options = state.availablePackingSourceTrips,
+                    selectedTripId = state.selectedPackingSourceTripId,
+                    onTripSelected = viewModel::onPackingSourceTripChange
+                )
+                Spacer(Modifier.height(12.dp))
+            }
+
             OutlinedTextField(
                 value = state.travellerCount,
                 onValueChange = viewModel::onTravellerCountChange,
@@ -169,6 +178,55 @@ fun TripFormScreen(
                 showDateRangePicker = false
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CopyPackingFromField(
+    options: List<PackingSourceTripOption>,
+    selectedTripId: String?,
+    onTripSelected: (String?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = options.firstOrNull { it.id == selectedTripId }?.label ?: "Start with an empty packing list"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Copy packing from (optional)") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Start with an empty packing list") },
+                onClick = {
+                    onTripSelected(null)
+                    expanded = false
+                }
+            )
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onTripSelected(option.id)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 

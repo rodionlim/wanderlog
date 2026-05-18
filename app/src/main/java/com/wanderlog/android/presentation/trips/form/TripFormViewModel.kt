@@ -8,6 +8,7 @@ import com.wanderlog.android.domain.model.Trip
 import com.wanderlog.android.domain.model.TravellerProfile
 import com.wanderlog.android.domain.repository.PlacesRepository
 import com.wanderlog.android.domain.repository.TripRepository
+import com.wanderlog.android.domain.usecase.packing.CopyPackingItemsFromTripUseCase
 import com.wanderlog.android.domain.usecase.trip.CreateTripUseCase
 import com.wanderlog.android.domain.usecase.trip.UpdateTripUseCase
 import com.wanderlog.android.presentation.navigation.Screen
@@ -27,6 +28,11 @@ data class TravellerFormProfile(
     val age: String = ""
 )
 
+data class PackingSourceTripOption(
+    val id: String,
+    val label: String
+)
+
 data class TripFormState(
     val tripId: String? = null,
     val name: String = "",
@@ -38,6 +44,8 @@ data class TripFormState(
     val currencyCode: String = "SGD",
     val travellerCount: String = "1",
     val travellerProfiles: List<TravellerFormProfile> = listOf(TravellerFormProfile(name = "Traveller 1")),
+    val availablePackingSourceTrips: List<PackingSourceTripOption> = emptyList(),
+    val selectedPackingSourceTripId: String? = null,
     val isLoading: Boolean = false,
     val isSaved: Boolean = false,
     val error: String? = null
@@ -49,12 +57,14 @@ class TripFormViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val placesRepository: Lazy<PlacesRepository>,
     private val travellerDefaultsStore: TravellerDefaultsStore,
+    private val copyPackingItemsFromTrip: CopyPackingItemsFromTripUseCase,
     private val createTrip: CreateTripUseCase,
     private val updateTrip: UpdateTripUseCase
 ) : ViewModel() {
 
     private var originalDestination: String? = null
     private var savedDefaultTravellerProfiles: List<TravellerProfile> = loadSavedTravellerDefaults()
+    private var availablePackingSourceTrips: List<Trip> = emptyList()
 
     private val _state = MutableStateFlow(TripFormState())
     val state: StateFlow<TripFormState> = _state.asStateFlow()
@@ -65,6 +75,28 @@ class TripFormViewModel @Inject constructor(
             loadTrip(tripId)
         } else {
             applySavedTravellerDefaults()
+            observePackingSourceTrips()
+        }
+    }
+
+    private fun observePackingSourceTrips() {
+        viewModelScope.launch {
+            tripRepository.getAllTrips().collect { trips ->
+                availablePackingSourceTrips = trips.sortedByDescending(Trip::startDate)
+                _state.update { current ->
+                    val selectedId = current.selectedPackingSourceTripId
+                        ?.takeIf { selectedTripId -> availablePackingSourceTrips.any { it.id == selectedTripId } }
+                    current.copy(
+                        availablePackingSourceTrips = availablePackingSourceTrips.map { trip ->
+                            PackingSourceTripOption(
+                                id = trip.id,
+                                label = trip.packingSourceLabel()
+                            )
+                        },
+                        selectedPackingSourceTripId = selectedId
+                    )
+                }
+            }
         }
     }
 
@@ -105,6 +137,9 @@ class TripFormViewModel @Inject constructor(
     }
     fun onBudgetChange(amount: String) = _state.update { it.copy(budgetAmount = amount) }
     fun onCurrencyChange(code: String) = _state.update { it.copy(currencyCode = code) }
+    fun onPackingSourceTripChange(tripId: String?) = _state.update {
+        it.copy(selectedPackingSourceTripId = tripId)
+    }
 
     fun onTravellerCountChange(count: String) {
         val digitsOnly = count.filter(Char::isDigit)
@@ -196,7 +231,18 @@ class TripFormViewModel @Inject constructor(
                     currencyCode = s.currencyCode,
                     travellerProfiles = travellerProfiles
                 )
-                if (s.tripId == null) createTrip(trip) else updateTrip(trip)
+                if (s.tripId == null) {
+                    createTrip(trip)
+                    selectedPackingSourceTrip(s.selectedPackingSourceTripId)?.let { sourceTrip ->
+                        copyPackingItemsFromTrip(
+                            sourceTripId = sourceTrip.id,
+                            targetTripId = trip.id,
+                            travellerNameMap = sourceTrip.travellerNameMapTo(trip)
+                        )
+                    }
+                } else {
+                    updateTrip(trip)
+                }
             }.onSuccess {
                 savedDefaultTravellerProfiles = travellerProfiles.ifEmpty { listOf(TravellerProfile(name = "Traveller 1")) }
                 travellerDefaultsStore.saveTravellerProfiles(savedDefaultTravellerProfiles)
@@ -210,10 +256,33 @@ class TripFormViewModel @Inject constructor(
     private fun loadSavedTravellerDefaults(): List<TravellerProfile> =
         travellerDefaultsStore.getTravellerProfiles()
             .ifEmpty { listOf(TravellerProfile(name = "Traveller 1")) }
+
+    private fun selectedPackingSourceTrip(selectedTripId: String?): Trip? =
+        availablePackingSourceTrips.firstOrNull { it.id == selectedTripId }
 }
 
 private fun List<TravellerProfile>.toFormProfiles(): List<TravellerFormProfile> =
     map { TravellerFormProfile(name = it.name, age = it.age?.toString().orEmpty()) }
+
+private fun Trip.packingSourceLabel(): String = buildString {
+    append(name)
+    if (destination.isNotBlank()) {
+        append(" • ")
+        append(destination)
+    }
+}
+
+private fun Trip.travellerNameMapTo(targetTrip: Trip): Map<String, String?> {
+    if (travellerProfiles.isEmpty() || targetTrip.travellerProfiles.isEmpty()) return emptyMap()
+
+    val targetNames = targetTrip.travellerProfiles.map(TravellerProfile::name)
+    return travellerProfiles.mapIndexedNotNull { index, travellerProfile ->
+        val sourceName = travellerProfile.name.takeIf { it.isNotBlank() } ?: return@mapIndexedNotNull null
+        val mappedName = targetNames.getOrNull(index)
+            ?: targetNames.firstOrNull()
+        sourceName to mappedName
+    }.toMap()
+}
 
 private fun List<TravellerFormProfile>.resizeTravellerProfiles(
     targetSize: Int,
