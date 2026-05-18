@@ -122,6 +122,20 @@ fun TripItineraryScreen(
     var itemToDelete by remember { mutableStateOf<ItineraryItem?>(null) }
     var showOverflowMenu by remember { mutableStateOf(false) }
 
+    fun openItemForm(item: ItineraryItem?) {
+        editingItem = item
+        selectedPlaceForForm = null
+        initialPlaceQuery = null
+        showItemForm = true
+    }
+
+    fun closeItemForm() {
+        showItemForm = false
+        editingItem = null
+        selectedPlaceForForm = null
+        initialPlaceQuery = null
+    }
+
     LaunchedEffect(showAddOptions, openFileImportAfterAddOptions) {
         if (!showAddOptions && openFileImportAfterAddOptions) {
             openFileImportAfterAddOptions = false
@@ -358,8 +372,7 @@ fun TripItineraryScreen(
                                             linkedExpense = item.linkedExpenseId?.let(state.linkedExpensesById::get),
                                             attachmentCount = state.attachmentCountsByItemId[item.id] ?: 0,
                                             onClick = {
-                                                editingItem = item
-                                                showItemForm = true
+                                                openItemForm(item)
                                             },
                                             onOpenInMaps = item.place?.toGoogleMapsUrl()?.let { mapsUrl ->
                                                 { uriHandler.openUri(mapsUrl) }
@@ -430,8 +443,7 @@ fun TripItineraryScreen(
                 OutlinedButton(
                     onClick = {
                         showAddOptions = false
-                        editingItem = null
-                        showItemForm = true
+                        openItemForm(null)
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -454,7 +466,7 @@ fun TripItineraryScreen(
     if (showItemForm) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
-            onDismissRequest = { showItemForm = false },
+            onDismissRequest = { closeItemForm() },
             sheetState = sheetState
         ) {
             val selectedDay = state.days.getOrNull(state.selectedDayIndex)
@@ -463,21 +475,22 @@ fun TripItineraryScreen(
                     tripId = tripId,
                     dayId = selectedDay.id,
                     dayDate = selectedDay.date,
+                    availableDays = state.days,
                     currencyCode = state.tripCurrencyCode,
                     editingItem = editingItem,
                     linkedExpense = editingItem?.linkedExpenseId?.let(state.linkedExpensesById::get),
                     selectedPlace = selectedPlaceForForm,
                     onSelectedPlaceApplied = { selectedPlaceForForm = null },
-                    onDismiss = { showItemForm = false },
+                    onDismiss = { closeItemForm() },
                     onDeleteRequested = editingItem?.let { item ->
                         {
-                            showItemForm = false
+                            closeItemForm()
                             itemToDelete = item
                         }
                     },
                     onManageAttachmentsRequested = editingItem?.let { item ->
                         {
-                            showItemForm = false
+                            closeItemForm()
                             onOpenItemAttachments(item.id)
                         }
                     },

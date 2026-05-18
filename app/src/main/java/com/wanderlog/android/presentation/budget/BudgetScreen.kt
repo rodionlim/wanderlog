@@ -57,6 +57,13 @@ fun BudgetScreen(
     var expenseCurrencyMenuExpanded by remember { mutableStateOf(false) }
     val displayedExpenses = if (state.filterCategory == null) state.expenses
                             else state.expenses.filter { it.category == state.filterCategory }
+    val displayedTotalSpent = displayedExpenses.sumOf { expense ->
+        ApproximateCurrencyConverter.convert(
+            amount = expense.amount,
+            fromCurrency = expense.currencyCode,
+            toCurrency = state.displayCurrencyCode
+        )
+    }
 
     Scaffold(
         topBar = { WanderTopBar(title = "Budget", onBack = onBack) },
@@ -73,9 +80,9 @@ fun BudgetScreen(
         ) {
             item {
                 state.convertedBudget?.let { convertedBudget ->
-                    val progress = (state.totalSpent / convertedBudget).coerceIn(0.0, 1.0).toFloat()
+                    val progress = (displayedTotalSpent / convertedBudget).coerceIn(0.0, 1.0).toFloat()
                     Column {
-                        Text("Spent: ${state.totalSpent.toCurrencyString(state.displayCurrencyCode)} / ${convertedBudget.toCurrencyString(state.displayCurrencyCode)}")
+                        Text("Spent: ${displayedTotalSpent.toCurrencyString(state.displayCurrencyCode)} / ${convertedBudget.toCurrencyString(state.displayCurrencyCode)}")
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                         val originalBudget = state.budget
@@ -87,7 +94,7 @@ fun BudgetScreen(
                             )
                         }
                     }
-                } ?: Text("Total spent: ${state.totalSpent.toCurrencyString(state.displayCurrencyCode)}")
+                } ?: Text("Total spent: ${displayedTotalSpent.toCurrencyString(state.displayCurrencyCode)}")
                 Text(
                     "Display currency: ${state.displayCurrencyCode}",
                     style = MaterialTheme.typography.bodySmall,
