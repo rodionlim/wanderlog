@@ -1,6 +1,7 @@
 package com.wanderlog.android.presentation.budget
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,7 +9,9 @@ import com.wanderlog.android.core.util.ApproximateCurrencyConverter
 import com.wanderlog.android.core.util.BudgetDisplayCurrencies
 import com.wanderlog.android.domain.model.Expense
 import com.wanderlog.android.domain.model.ExpenseCategory
+import com.wanderlog.android.domain.model.ParsedBudgetExpense
 import com.wanderlog.android.domain.repository.TripRepository
+import com.wanderlog.android.domain.usecase.ai.ParseBudgetExpensePhotoUseCase
 import com.wanderlog.android.domain.usecase.expense.AddExpenseUseCase
 import com.wanderlog.android.domain.usecase.expense.DeleteExpenseUseCase
 import com.wanderlog.android.domain.usecase.expense.GetExpensesUseCase
@@ -24,6 +27,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 import com.wanderlog.android.presentation.settings.SettingsViewModel
+import java.time.LocalDate
 
 data class BudgetUiState(
     val tripName: String = "",
@@ -40,7 +44,9 @@ data class BudgetUiState(
     val addCurrencyCode: String = "SGD",
     val addCategory: ExpenseCategory = ExpenseCategory.OTHER,
     val showAddForm: Boolean = false,
-    val editingExpenseId: String? = null
+    val editingExpenseId: String? = null,
+    val photoImportStep: BudgetPhotoImportStep = BudgetPhotoImportStep.Idle,
+    val selectedDate: LocalDate? = null
 )
 
 @HiltViewModel
@@ -49,6 +55,7 @@ class BudgetViewModel @Inject constructor(
     @ApplicationContext context: Context,
     private val tripRepository: TripRepository,
     getExpenses: GetExpensesUseCase,
+    private val parseBudgetExpensePhoto: ParseBudgetExpensePhotoUseCase,
     private val addExpense: AddExpenseUseCase,
     private val updateExpense: UpdateExpenseUseCase,
     private val deleteExpense: DeleteExpenseUseCase
@@ -101,11 +108,109 @@ class BudgetViewModel @Inject constructor(
             )
         }
     }
+
+    fun openAddForm() = _state.update {
+        it.copy(
+            showAddForm = true,
+            editingExpenseId = null,
+            addTitle = "",
+            addAmount = "",
+            addCurrencyCode = latestTripCurrencyCode,
+            addCategory = ExpenseCategory.OTHER
+        )
+    }
+
+    fun closeAddForm() = _state.update {
+        it.copy(
+            showAddForm = false,
+            editingExpenseId = null,
+            addTitle = "",
+            addAmount = "",
+            addCurrencyCode = latestTripCurrencyCode,
+            addCategory = ExpenseCategory.OTHER
+        )
+    }
     fun onTitleChange(v: String) = _state.update { it.copy(addTitle = v) }
     fun onAmountChange(v: String) = _state.update { it.copy(addAmount = v) }
     fun onCurrencyCodeChange(v: String) = _state.update { it.copy(addCurrencyCode = BudgetDisplayCurrencies.sanitize(v)) }
     fun onCategoryChange(v: ExpenseCategory) = _state.update { it.copy(addCategory = v) }
     fun filterByCategory(cat: ExpenseCategory?) = _state.update { it.copy(filterCategory = cat) }
+    fun onDateChange(date: LocalDate) {
+        _state.update {
+            it.copy(selectedDate = date)
+        }
+    }
+
+    fun startPhotoImport(uri: Uri) {
+        viewModelScope.launch {
+            _state.update { it.copy(photoImportStep = BudgetPhotoImportStep.Parsing) }
+            runCatching {
+                parseBudgetExpensePhoto(uri, latestTripCurrencyCode)
+            }.onSuccess { parsed ->
+                _state.update {
+                    it.copy(photoImportStep = BudgetPhotoImportStep.Review(parsed.items))
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(photoImportStep = BudgetPhotoImportStep.Error(error.message ?: "Photo import failed"))
+                }
+            }
+        }
+    }
+
+    fun updateImportedExpense(updatedExpense: ParsedBudgetExpense) {
+        _state.update { current ->
+            val step = current.photoImportStep as? BudgetPhotoImportStep.Review ?: return@update current
+            current.copy(
+                photoImportStep = step.copy(
+                    items = step.items.map { item -> if (item.id == updatedExpense.id) updatedExpense else item }
+                )
+            )
+        }
+    }
+
+    fun removeImportedExpense(expenseId: String) {
+        _state.update { current ->
+            val step = current.photoImportStep as? BudgetPhotoImportStep.Review ?: return@update current
+            current.copy(photoImportStep = step.copy(items = step.items.filterNot { it.id == expenseId }))
+        }
+    }
+
+    fun resetPhotoImport() {
+        _state.update { it.copy(photoImportStep = BudgetPhotoImportStep.Idle) }
+    }
+
+    fun commitImportedExpenses() {
+        val review = (_state.value.photoImportStep as? BudgetPhotoImportStep.Review) ?: return
+        viewModelScope.launch {
+            runCatching {
+                review.items.forEach { parsed ->
+                    val amount = parsed.amountText.trim().toDoubleOrNull()
+                        ?: throw IllegalStateException("Enter a valid amount for ${parsed.title}")
+                    addExpense(
+                        Expense(
+                            id = UUID.randomUUID().toString(),
+                            tripId = tripId,
+                            title = parsed.title.trim(),
+                            amount = amount,
+                            currencyCode = parsed.currencyCode,
+                            category = parsed.category,
+                            date = parsed.dateText?.trim()?.takeIf { it.isNotBlank() }?.let {
+                                runCatching { LocalDate.parse(it) }.getOrNull()
+                            },
+                            notes = parsed.notes?.trim()?.takeIf { it.isNotBlank() }
+                        )
+                    )
+                }
+            }.onSuccess {
+                _state.update { it.copy(photoImportStep = BudgetPhotoImportStep.Idle) }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(photoImportStep = BudgetPhotoImportStep.Error(error.message ?: "Failed to import expenses"))
+                }
+            }
+        }
+    }
 
     fun editExpense(expense: Expense) {
         _state.update {
@@ -167,6 +272,17 @@ class BudgetViewModel @Inject constructor(
         viewModelScope.launch { deleteExpense.invoke(expense) }
     }
 
+    fun duplicateExpense(expense: Expense) {
+        viewModelScope.launch {
+            addExpense(
+                expense.copy(
+                    id = UUID.randomUUID().toString(),
+                    title = nextDuplicateTitle(expense)
+                )
+            )
+        }
+    }
+
     private fun recomputeBudgetState(
         expenses: List<Expense>,
         tripName: String = _state.value.tripName
@@ -203,5 +319,30 @@ class BudgetViewModel @Inject constructor(
                 addCurrencyCode = it.addCurrencyCode.ifBlank { latestTripCurrencyCode }
             )
         }
+    }
+
+    private fun nextDuplicateTitle(expense: Expense): String {
+        val baseTitle = normalizeDuplicateBaseTitle(expense.title)
+        val matchingNumbers = _state.value.expenses.mapNotNull { existingExpense ->
+            val (existingBase, suffixNumber) = parseDuplicateTitle(existingExpense.title)
+            if (existingBase.equals(baseTitle, ignoreCase = true)) suffixNumber else null
+        }
+
+        val nextNumber = (matchingNumbers.maxOrNull() ?: 0) + 1
+        return "$baseTitle $nextNumber"
+    }
+
+    private fun normalizeDuplicateBaseTitle(title: String): String =
+        title.trim().replace(duplicateSuffixRegex, "").trim().ifBlank { title.trim() }
+
+    private fun parseDuplicateTitle(title: String): Pair<String, Int?> {
+        val trimmed = title.trim()
+        val match = duplicateSuffixRegex.find(trimmed) ?: return trimmed to null
+        val base = trimmed.substring(0, match.range.first).trim()
+        return base to match.groupValues[1].toIntOrNull()
+    }
+
+    private companion object {
+        private val duplicateSuffixRegex = Regex("\\s+(\\d+)$")
     }
 }

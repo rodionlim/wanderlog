@@ -10,11 +10,15 @@ import com.wanderlog.android.data.remote.openai.dto.MessageDto
 import com.wanderlog.android.data.remote.openai.dto.ResponseFormatDto
 import com.wanderlog.android.data.remote.openai.dto.TextPart
 import com.wanderlog.android.core.util.TripAssistantPromptSupport
+import com.wanderlog.android.core.util.BudgetDisplayCurrencies
 import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.domain.model.Expense
+import com.wanderlog.android.domain.model.ExpenseCategory
 import com.wanderlog.android.domain.model.ItineraryItem
 import com.wanderlog.android.domain.model.ItineraryItemType
 import com.wanderlog.android.domain.model.PackingItem
+import com.wanderlog.android.domain.model.ParsedBudgetExpense
+import com.wanderlog.android.domain.model.ParsedBudgetExpenseImport
 import com.wanderlog.android.domain.model.ParsedActivity
 import com.wanderlog.android.domain.model.ParsedBooking
 import com.wanderlog.android.domain.model.ParsedFlight
@@ -398,6 +402,52 @@ class AiRepositoryImpl @Inject constructor(
         return parseBookingJson(json)
     }
 
+    override suspend fun parseBudgetExpenses(
+        contentParts: List<ContentPartDto>,
+        fallbackCurrencyCode: String
+    ): ParsedBudgetExpenseImport {
+        val requestModel = pickParsingModel(
+            SettingsViewModel.getOpenAiModel(context),
+            SettingsViewModel.getOpenAiParsingModel(context),
+            contentParts
+        )
+        val systemPrompt = "You are a budget expense photo parser. Always respond with valid JSON only."
+        val parsePrompt = TextPart(text = """
+            Extract every budget expense visible in this photo.
+            If the image contains multiple charges or line items, return multiple items.
+            Prefer the currency code $fallbackCurrencyCode when no currency is visible.
+            Use these categories only: TRANSPORT, ACCOMMODATION, FOOD, GROCERIES, ACTIVITY, SHOPPING, OTHER.
+            Output ONLY valid JSON with this schema:
+            {
+              "items": [
+                {
+                  "title": "",
+                  "amount": "",
+                  "currencyCode": "$fallbackCurrencyCode",
+                  "category": "OTHER",
+                  "date": null,
+                  "notes": null
+                }
+              ]
+            }
+        """.trimIndent())
+
+        val request = buildChatCompletionRequest(
+            model = requestModel,
+            messages = listOf(
+                MessageDto("system", systemPrompt),
+                MessageDto("user", listOf(parsePrompt) + contentParts)
+            ),
+            responseFormat = ResponseFormatDto("json_object")
+        )
+
+        val response = chatCompletionOrThrow(
+            request,
+            "parse budget expense photo with model $requestModel"
+        )
+        return parseBudgetExpenseJson(response.choices.first().message.content, fallbackCurrencyCode)
+    }
+
     private fun pickParsingModel(
         selectedModel: String,
         selectedParsingModel: String,
@@ -625,6 +675,45 @@ class AiRepositoryImpl @Inject constructor(
         }
 
         return ParsedBooking(flights, hotels, activities)
+    }
+
+    private fun parseBudgetExpenseJson(json: String, fallbackCurrencyCode: String): ParsedBudgetExpenseImport {
+        val root = JSONObject(json)
+        val items = root.optJSONArray("items") ?: throw IllegalStateException("OpenAI returned budget JSON without an items array.")
+
+        return ParsedBudgetExpenseImport(
+            items = buildList {
+                for (index in 0 until items.length()) {
+                    val itemObject = items.optJSONObject(index) ?: continue
+                    val amountText = firstNonBlank(
+                        itemObject.optString("amount"),
+                        itemObject.optString("price"),
+                        itemObject.optString("value")
+                    )?.trim()?.takeIf { it.isNotBlank() } ?: continue
+                    val title = itemObject.optString("title").trim().ifBlank { "Expense ${index + 1}" }
+                    val category = runCatching {
+                        ExpenseCategory.valueOf(itemObject.optString("category", ExpenseCategory.OTHER.name).uppercase())
+                    }.getOrDefault(ExpenseCategory.OTHER)
+
+                    add(
+                        ParsedBudgetExpense(
+                            title = title,
+                            amountText = amountText,
+                            currencyCode = BudgetDisplayCurrencies.sanitize(
+                                firstNonBlank(
+                                    itemObject.optString("currencyCode"),
+                                    itemObject.optString("currency_code"),
+                                    fallbackCurrencyCode
+                                )
+                            ),
+                            category = category,
+                            dateText = itemObject.optNullableString("date"),
+                            notes = itemObject.optNullableString("notes")
+                        )
+                    )
+                }
+            }
+        )
     }
 
     private fun firstNonBlank(vararg values: String?): String? =

@@ -4,6 +4,7 @@ import com.wanderlog.android.data.remote.openai.dto.ContentPartDto
 import com.wanderlog.android.domain.model.DocumentHint
 import com.wanderlog.android.domain.model.Expense
 import com.wanderlog.android.domain.model.PackingItem
+import com.wanderlog.android.domain.model.ParsedBudgetExpenseImport
 import com.wanderlog.android.domain.model.ParsedBooking
 import com.wanderlog.android.domain.model.TravellerProfile
 import com.wanderlog.android.domain.model.Trip
@@ -39,4 +40,9 @@ interface AiRepository {
     ): String
 
     suspend fun parseFile(contentParts: List<ContentPartDto>, hint: DocumentHint? = null): ParsedBooking
+
+    suspend fun parseBudgetExpenses(
+        contentParts: List<ContentPartDto>,
+        fallbackCurrencyCode: String
+    ): ParsedBudgetExpenseImport
 }

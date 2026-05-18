@@ -38,8 +38,8 @@ coil                        = "2.7.0"
 # Google Maps
 mapsCompose                 = "4.4.1"
 playServicesMaps            = "19.0.0"
-playServicesLocation        = "21.3.0"
 playServicesNearby          = "19.3.0"
+playServicesLocation        = "21.3.0"
 
 # Google Places
 places                      = "3.5.0"

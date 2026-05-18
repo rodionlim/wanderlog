@@ -170,15 +170,13 @@ class PackingViewModel @Inject constructor(
 
     fun applyAiUpdate() {
         val current = _state.value
-        val loadedTrip = trip
+        val loadedTrip = trip ?: run {
+            _state.update { it.copy(aiError = "Trip details are still loading.") }
+            return
+        }
         val prompt = current.aiPrompt.trim()
 
         when {
-            loadedTrip == null -> {
-                _state.update { it.copy(aiError = "Trip details are still loading.") }
-                return
-            }
-
             prompt.isBlank() -> {
                 _state.update { it.copy(aiError = "Enter a prompt for the packing update.") }
                 return
