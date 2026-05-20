@@ -19,8 +19,10 @@ import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
 import org.json.JSONArray
 import org.json.JSONObject
+import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
 import com.wanderlog.android.BuildConfig
 import com.wanderlog.android.domain.model.sync.SyncEntityType
 import com.wanderlog.android.domain.model.sync.TripSyncBundle
@@ -85,6 +87,9 @@ class NearbyTripSyncTransport @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val controlAdapter = moshi.adapter(NearbySyncControlMessage::class.java)
     private val bundleAdapter = moshi.adapter(TripSyncBundle::class.java)
+    private val bundlePayloadAdapter: JsonAdapter<Map<String, Any?>> = moshi.adapter(
+        Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
+    )
     private val discoveredPeers = linkedMapOf<String, NearbySyncPeer>()
     private val knownEndpointNames = mutableMapOf<String, String>()
     private val incomingFilePayloads = mutableMapOf<Long, Pair<String, Payload>>()
@@ -294,7 +299,13 @@ class NearbyTripSyncTransport @Inject constructor(
             return
         }
 
-        val bundle = runCatching { bundleAdapter.fromJson(file.readText()) }
+        val bundle = runCatching {
+            parseIncomingTripSyncBundle(
+                payload = file.readText(),
+                bundleAdapter = bundleAdapter,
+                bundlePayloadAdapter = bundlePayloadAdapter
+            )
+        }
             .getOrElse { error ->
                 reportError("Unable to read incoming bundle", error)
                 null
@@ -574,6 +585,25 @@ internal fun JSONObject.toIncomingTripSyncManifest(controlTripId: String?): Trip
         generatedAtValue = normalizedJson.opt("generatedAt"),
         recordsValue = normalizedJson.opt("records")
     )
+}
+
+internal fun parseIncomingTripSyncBundle(
+    payload: String,
+    bundleAdapter: JsonAdapter<TripSyncBundle>,
+    bundlePayloadAdapter: JsonAdapter<Map<String, Any?>>
+): TripSyncBundle? {
+    val normalizedPayload = normalizeIncomingTripSyncBundlePayload(payload, bundlePayloadAdapter)
+    return bundleAdapter.fromJson(normalizedPayload)
+}
+
+internal fun normalizeIncomingTripSyncBundlePayload(
+    payload: String,
+    bundlePayloadAdapter: JsonAdapter<Map<String, Any?>>
+): String {
+    val payloadMap = bundlePayloadAdapter.fromJson(payload)?.toMutableMap() ?: return payload
+    payloadMap["protocolVersion"] = payloadMap["protocolVersion"]
+        .toPositiveIntOrDefault(TripSyncManifest.CURRENT_PROTOCOL_VERSION)
+    return bundlePayloadAdapter.toJson(payloadMap)
 }
 
 internal fun buildIncomingTripSyncManifest(
